@@ -125,3 +125,12 @@ export {
   parseReviewerOutput,
   checkReviewerAuth,
 } from './reviewer.js';
+
+export {
+  checkHighRiskGlobs,
+  checkDiffFraction,
+  checkRepeatedStops,
+  computeRiskFlags,
+  shouldTriggerReviewer,
+  type StopHistoryEntry,
+} from './risk.js';
