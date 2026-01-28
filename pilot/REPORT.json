@@ -1,30 +1,17 @@
 {
   "v": 3,
-  "task": "WP-041",
+  "task": "WP-042",
   "status": "DONE",
   "subtasks_completed": [
-    "Created src/lib/scope.ts module with scope checking functions",
-    "Implemented matchesGlob(path, patterns) function using micromatch",
-    "Implemented checkScopeViolations(touchedPaths, untrackedPaths, taskScope, config) function",
-    "Created ScopeCheckResult interface with ok, violations, touched_paths fields",
-    "Created ScopeViolation interface with type, path, detail fields",
-    "Implemented forbidden_globs violation checking",
-    "Implemented allowed_globs violation checking (path must match at least one)",
-    "Implemented allow_new_files violation checking",
-    "Implemented allow_lockfile_changes violation checking using config.scope.lockfiles",
-    "Exported all functions and types from src/lib/index.ts",
-    "Added micromatch dependency to package.json",
-    "Added @types/micromatch dev dependency"
+    "Added DiffLimitCheckResult interface to src/lib/diff.ts",
+    "Created checkDiffLimits function that checks files_touched and lines_changed against task limits",
+    "Created formatBlastRadius function to generate summary string in format '<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new'",
+    "Exported checkDiffLimits, formatBlastRadius, and DiffLimitCheckResult from src/lib/index.ts"
   ],
-  "git_diff_files": [
-    "package.json",
-    "pnpm-lock.yaml",
-    "src/lib/index.ts",
-    "src/lib/scope.ts"
-  ],
+  "git_diff_files": ["src/lib/diff.ts", "src/lib/index.ts"],
   "files": {
-    "changed": ["src/lib/index.ts", "package.json"],
-    "created": ["src/lib/scope.ts"],
+    "changed": ["src/lib/diff.ts", "src/lib/index.ts"],
+    "created": [],
     "deleted": []
   },
   "verify": [
@@ -34,11 +21,6 @@
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [
-    "Added micromatch@^4.0.8 and @types/micromatch@^4.0.10 as dependencies (required for glob matching)",
-    "Used default import for micromatch (v4 uses default export)",
-    "Implemented isLockfile helper function to check if path matches lockfile patterns",
-    "All scope violation types are exported as constants for use by judge phase"
-  ],
+  "notes": [],
   "blockers": []
 }

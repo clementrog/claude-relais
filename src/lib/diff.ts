@@ -24,6 +24,24 @@ export interface DiffAnalysis {
 }
 
 /**
+ * Result of checking diff limits.
+ */
+export interface DiffLimitCheckResult {
+  /** True if within limits, false if limits exceeded */
+  ok: boolean;
+  /** Actual files touched */
+  files_touched: number;
+  /** Actual lines changed (added + deleted) */
+  lines_changed: number;
+  /** Maximum files limit from task */
+  max_files: number;
+  /** Maximum lines limit from task */
+  max_lines: number;
+  /** Description of violation if limits exceeded, null otherwise */
+  violation: string | null;
+}
+
+/**
  * Gets tracked files that have changed since a base commit.
  *
  * Uses `git diff --name-status` to get all tracked changes.
@@ -236,4 +254,70 @@ export function analyzeDiff(baseCommit: string): DiffAnalysis {
     new_files: newFilesCount,
     touched_paths: allPaths.sort(),
   };
+}
+
+/**
+ * Checks if diff analysis exceeds task diff limits.
+ *
+ * Compares files_touched against max_files_touched and lines_changed
+ * (added + deleted) against max_lines_changed.
+ *
+ * @param analysis - The diff analysis result
+ * @param limits - The diff limits from the task
+ * @returns DiffLimitCheckResult with ok status and violation details
+ *
+ * @example
+ * ```typescript
+ * const analysis = analyzeDiff('abc123');
+ * const limits = { max_files_touched: 10, max_lines_changed: 100 };
+ * const result = checkDiffLimits(analysis, limits);
+ * if (!result.ok) {
+ *   console.error(`Violation: ${result.violation}`);
+ * }
+ * ```
+ */
+export function checkDiffLimits(
+  analysis: DiffAnalysis,
+  limits: { max_files_touched: number; max_lines_changed: number }
+): DiffLimitCheckResult {
+  const lines_changed = analysis.lines_added + analysis.lines_deleted;
+  const filesExceeded = analysis.files_touched > limits.max_files_touched;
+  const linesExceeded = lines_changed > limits.max_lines_changed;
+
+  let violation: string | null = null;
+  if (filesExceeded && linesExceeded) {
+    violation = `Files touched (${analysis.files_touched}) exceeds limit (${limits.max_files_touched}) and lines changed (${lines_changed}) exceeds limit (${limits.max_lines_changed})`;
+  } else if (filesExceeded) {
+    violation = `Files touched (${analysis.files_touched}) exceeds limit (${limits.max_files_touched})`;
+  } else if (linesExceeded) {
+    violation = `Lines changed (${lines_changed}) exceeds limit (${limits.max_lines_changed})`;
+  }
+
+  return {
+    ok: !filesExceeded && !linesExceeded,
+    files_touched: analysis.files_touched,
+    lines_changed,
+    max_files: limits.max_files_touched,
+    max_lines: limits.max_lines_changed,
+    violation,
+  };
+}
+
+/**
+ * Formats blast radius summary string from diff analysis.
+ *
+ * Format: "<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new"
+ *
+ * @param analysis - The diff analysis result
+ * @returns Formatted blast radius summary string
+ *
+ * @example
+ * ```typescript
+ * const analysis = analyzeDiff('abc123');
+ * const summary = formatBlastRadius(analysis);
+ * // "5 files, +120/-30, 2 new"
+ * ```
+ */
+export function formatBlastRadius(analysis: DiffAnalysis): string {
+  return `${analysis.files_touched} files, +${analysis.lines_added}/-${analysis.lines_deleted}, ${analysis.new_files} new`;
 }

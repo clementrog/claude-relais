@@ -1,69 +1,56 @@
 {
   "v": 5,
-  "id": "WP-041",
+  "id": "WP-042",
   "milestone": "M5",
-  "goal": "Implement scope enforcement using glob matching against touched paths",
+  "goal": "Implement diff limits enforcement to check files_touched and lines_changed limits",
 
   "context": {
-    "why": "Judge must verify that all touched paths comply with task scope: match allowed_globs, don't match forbidden_globs, and respect allow_new_files and allow_lockfile_changes flags.",
+    "why": "Judge must verify that diff size doesn't exceed task limits. If files_touched > max_files_touched OR lines_changed > max_lines_changed → STOP(diff_too_large).",
     "deps": ["WP-040"],
-    "extract": "From PRD Section 10: touched matches forbidden_globs → STOP(scope_violation_forbidden). touched not matched by allowed_globs → STOP(scope_violation_outside_allowed). new files created when allow_new_files=false → STOP(new_file_forbidden). lockfile touched when allow_lockfile_changes=false → STOP(lockfile_change_forbidden)."
+    "extract": "From PRD Section 10: Diff size exceeds limits (files_touched > max_files_touched OR lines_changed > max_lines_changed) → STOP(STOP_DIFF_TOO_LARGE). Blast radius summary: '<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new'."
   },
 
   "subtasks": [
-    "1. Create src/lib/scope.ts module for scope checking functions",
-    "2. Implement matchesGlob(path, patterns): check if path matches any glob pattern",
-    "3. Implement checkScopeViolations(touchedPaths, taskScope, config): returns ScopeCheckResult",
-    "4. Create ScopeCheckResult interface with ok, violations, touched_paths",
-    "5. Check forbidden_globs violations",
-    "6. Check allowed_globs violations (path must match at least one)",
-    "7. Check allow_new_files violations",
-    "8. Check allow_lockfile_changes violations using config.scope.lockfiles list",
-    "9. Export from src/lib/index.ts"
+    "1. Add checkDiffLimits function to src/lib/diff.ts",
+    "2. Create DiffLimitCheckResult interface with ok, violation details",
+    "3. Check files_touched against task.diff_limits.max_files_touched",
+    "4. Check lines_changed (added + deleted) against task.diff_limits.max_lines_changed",
+    "5. Create formatBlastRadius function to generate summary string",
+    "6. Export new functions from src/lib/index.ts"
   ],
 
   "implementation": {
-    "ScopeCheckResult_interface": {
-      "ok": "boolean - true if no violations",
-      "violations": "ScopeViolation[] - list of violations found",
-      "touched_paths": "string[] - all paths that were checked"
+    "DiffLimitCheckResult_interface": {
+      "ok": "boolean - true if within limits",
+      "files_touched": "number - actual files touched",
+      "lines_changed": "number - actual lines changed (added + deleted)",
+      "max_files": "number - limit from task",
+      "max_lines": "number - limit from task",
+      "violation": "string | null - description if limits exceeded"
     },
-    "ScopeViolation_interface": {
-      "type": "string - violation type (forbidden, outside_allowed, new_file_forbidden, lockfile_forbidden)",
-      "path": "string - the path that violated scope",
-      "detail": "string - human-readable explanation"
-    },
-    "glob_matching": "Use micromatch or minimatch for glob pattern matching",
-    "violation_types": [
-      "SCOPE_VIOLATION_FORBIDDEN - path matches forbidden_globs",
-      "SCOPE_VIOLATION_OUTSIDE_ALLOWED - path doesn't match any allowed_globs",
-      "NEW_FILE_FORBIDDEN - new file created when allow_new_files=false",
-      "LOCKFILE_CHANGE_FORBIDDEN - lockfile touched when allow_lockfile_changes=false"
-    ]
+    "blast_radius_format": "<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new",
+    "lines_changed_calc": "lines_added + lines_deleted"
   },
 
   "scope": {
-    "write": ["src/lib/scope.ts", "src/lib/index.ts"],
-    "create_under": ["src/lib/"],
+    "write": ["src/lib/diff.ts", "src/lib/index.ts"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "matchesGlob correctly matches paths against glob patterns",
-    "Forbidden glob violations are detected",
-    "Outside-allowed violations are detected",
-    "New file violations are detected when allow_new_files=false",
-    "Lockfile violations are detected when allow_lockfile_changes=false",
-    "ScopeCheckResult contains all violations with clear details",
+    "checkDiffLimits detects when files_touched exceeds max_files_touched",
+    "checkDiffLimits detects when lines_changed exceeds max_lines_changed",
+    "formatBlastRadius returns correct summary string format",
+    "Returns ok=true when within limits",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "MED",
+  "risk": "LOW",
   "notes": [
-    "Use micromatch (already commonly used) for glob matching",
-    "Lockfiles list comes from config.scope.lockfiles",
-    "New files are detected by checking if path exists in untracked set"
+    "Uses DiffAnalysis from WP-040 as input",
+    "DiffLimits type from task.diff_limits"
   ]
 }

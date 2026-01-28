@@ -64,7 +64,10 @@ export {
   getTouchedUntracked,
   getDiffStats,
   analyzeDiff,
+  checkDiffLimits,
+  formatBlastRadius,
   type DiffAnalysis,
+  type DiffLimitCheckResult,
 } from './diff.js';
 
 export {
