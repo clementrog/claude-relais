@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "DISPATCH",
   "mode": "single",
-  "task": "WP-021",
+  "task": "WP-022",
   "milestone": "M3",
-  "branch": "task/wp-021-orchestrator",
+  "branch": "task/wp-022-task-validation",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "BUILD",
-  "ts": "2026-01-28T11:25:00Z"
+  "ts": "2026-01-28T11:35:00Z"
 }

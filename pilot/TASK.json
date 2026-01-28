@@ -1,91 +1,62 @@
 {
   "v": 5,
-  "id": "WP-021",
+  "id": "WP-022",
   "milestone": "M3",
-  "goal": "Implement orchestrator invocation using Claude Code in plan mode",
+  "goal": "Add JSON Schema validation for TASK.json using Ajv",
 
   "context": {
-    "why": "The orchestrator (Brain) proposes tasks. It runs in plan mode (no tool execution) and outputs JSON matching task.schema.json.",
-    "deps": ["WP-020"],
-    "extract": "From PRD Section 8: Orchestrator uses --permission-mode plan, --max-turns 1, outputs ONLY a JSON object that validates against task.schema.json."
+    "why": "PRD requires that orchestrator output validates against task.schema.json. Using Ajv provides robust validation with clear error messages.",
+    "deps": ["WP-021"],
+    "extract": "From PRD: Orchestrator output MUST be a single JSON object that validates against task.schema.json. If invalid, runner retries once with appended retry_reason."
   },
 
   "subtasks": [
-    "1. Create src/types/task.ts with Task interface matching task.schema.json",
-    "2. Create src/runner/orchestrator.ts with runOrchestrator function",
-    "3. Implement buildOrchestratorPrompt() to construct the user prompt",
-    "4. Load and interpolate prompt templates from relais/prompts/",
-    "5. Parse orchestrator output and extract Task JSON",
-    "6. Wire into tick.ts ORCHESTRATE phase",
-    "7. Export from index files"
+    "1. Install ajv as a dependency (pnpm add ajv)",
+    "2. Create src/lib/schema.ts with loadSchema and validateWithSchema functions",
+    "3. Load task.schema.json from relais/schemas/",
+    "4. Update orchestrator.ts to use Ajv validation instead of basic validation",
+    "5. Return detailed validation errors for debugging",
+    "6. Export from index files"
   ],
 
   "implementation": {
-    "Task": {
-      "note": "Match task.schema.json structure",
-      "fields": {
-        "task_id": "string",
-        "milestone_id": "string",
-        "task_kind": "'execute' | 'verify_only' | 'question'",
-        "intent": "string",
-        "question": "optional object with prompt and choices",
-        "scope": "{ allowed_globs, forbidden_globs, allow_new_files, allow_lockfile_changes }",
-        "diff_limits": "{ max_files_touched, max_lines_changed }",
-        "verification": "{ fast: string[], slow: string[], params?: object }",
-        "builder": "{ mode, max_turns, instructions, patch? }"
-      }
+    "loadSchema": {
+      "signature": "async function loadSchema(schemaPath: string): Promise<object>",
+      "behavior": "Load and parse JSON schema file"
     },
-    "runOrchestrator": {
-      "signature": "async function runOrchestrator(state: TickState): Promise<OrchestratorResult>",
-      "behavior": [
-        "1. Load system prompt from config.orchestrator.system_prompt_file",
-        "2. Build user prompt with context (facts, last report, budgets)",
-        "3. Invoke Claude Code with plan mode, max-turns 1",
-        "4. Parse response as JSON",
-        "5. Validate against task schema (basic validation)",
-        "6. Return OrchestratorResult with task or error"
-      ]
+    "validateWithSchema": {
+      "signature": "function validateWithSchema<T>(data: unknown, schema: object): ValidationResult<T>",
+      "behavior": "Validate data against schema, return typed result or errors"
     },
-    "OrchestratorResult": {
-      "success": "boolean",
-      "task": "Task | null",
-      "error": "string | null",
-      "rawResponse": "string"
+    "ValidationResult": {
+      "valid": "boolean",
+      "data": "T | null - typed data if valid",
+      "errors": "string[] - validation error messages"
     },
-    "promptInterpolation": {
-      "placeholders": [
-        "{{PROJECT_GOAL}}",
-        "{{MILESTONE_ID}}",
-        "{{BUDGETS_SUMMARY}}",
-        "{{VERIFY_TEMPLATE_IDS}}",
-        "{{REPO_SUMMARY}}",
-        "{{FACTS_MD}}",
-        "{{LAST_REPORT_MD}}",
-        "{{BLOCKED_JSON_OR_EMPTY}}"
-      ]
+    "integration": {
+      "note": "Update parseTaskFromResponse in orchestrator.ts to use validateWithSchema"
     }
   },
 
   "scope": {
-    "write": ["src/runner/tick.ts"],
-    "create_under": ["src/types", "src/runner"],
+    "write": ["src/runner/orchestrator.ts"],
+    "create_under": ["src/lib"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "package.json"]
+    "forbidden": ["pilot/*", "relais/*"]
   },
 
   "acceptance": [
-    "src/types/task.ts exists with Task interface",
-    "src/runner/orchestrator.ts exists with runOrchestrator",
-    "Prompt templates are loaded and interpolated",
-    "ORCHESTRATE phase in tick.ts calls runOrchestrator",
+    "ajv is installed as dependency",
+    "src/lib/schema.ts exists with loadSchema and validateWithSchema",
+    "orchestrator.ts uses Ajv for task validation",
+    "Invalid tasks return clear error messages",
     "pnpm build succeeds"
   ],
 
-  "verify": ["pnpm build"],
+  "verify": ["pnpm install", "pnpm build"],
   "risk": "MED",
   "notes": [
-    "For now, use placeholder values for prompt interpolation",
-    "Schema validation can be basic (check required fields)",
-    "Full Ajv validation can be added later"
+    "Use ajv with draft-2020-12 support",
+    "Cache compiled schema for performance"
   ]
 }

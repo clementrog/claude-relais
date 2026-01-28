@@ -1,0 +1,100 @@
+/**
+ * JSON Schema validation utilities using Ajv.
+ *
+ * Provides functions to load and validate data against JSON schemas.
+ */
+
+import Ajv, { type ValidateFunction } from 'ajv/dist/2020.js';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+/**
+ * Result of schema validation.
+ */
+export interface ValidationResult<T> {
+  /** Whether the data is valid */
+  valid: boolean;
+  /** Typed data if valid, null otherwise */
+  data: T | null;
+  /** Validation error messages if invalid */
+  errors: string[];
+}
+
+// Cache for compiled schemas
+const schemaCache = new Map<string, ValidateFunction>();
+
+/**
+ * Loads and parses a JSON schema file.
+ *
+ * @param schemaPath - Path to the JSON schema file
+ * @returns Parsed schema object
+ * @throws Error if the schema file cannot be read or parsed
+ */
+export async function loadSchema(schemaPath: string): Promise<object> {
+  try {
+    const content = await readFile(schemaPath, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `Failed to load schema from ${schemaPath}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Validates data against a JSON schema using Ajv.
+ *
+ * Uses draft-2020-12 schema support and caches compiled schemas for performance.
+ *
+ * @param data - Data to validate
+ * @param schema - JSON schema object
+ * @returns ValidationResult with typed data or error messages
+ */
+export function validateWithSchema<T>(data: unknown, schema: object): ValidationResult<T> {
+  // Create Ajv instance with draft-2020-12 support
+  const ajv = new Ajv({
+    strict: true,
+    allErrors: true,
+    verbose: true,
+  });
+
+  // Use schema ID or stringified schema as cache key
+  const schemaId = (schema as { $id?: string }).$id || JSON.stringify(schema);
+  let validate: ValidateFunction;
+
+  // Check cache first
+  if (schemaCache.has(schemaId)) {
+    validate = schemaCache.get(schemaId)!;
+  } else {
+    // Compile and cache schema
+    validate = ajv.compile(schema);
+    schemaCache.set(schemaId, validate);
+  }
+
+  // Validate data
+  const valid = validate(data);
+
+  if (valid) {
+    return {
+      valid: true,
+      data: data as T,
+      errors: [],
+    };
+  }
+
+  // Collect error messages
+  const errors: string[] = [];
+  if (validate.errors) {
+    for (const error of validate.errors) {
+      const path = error.instancePath || error.schemaPath || '';
+      const message = error.message || 'Validation error';
+      errors.push(`${path ? `${path}: ` : ''}${message}`);
+    }
+  }
+
+  return {
+    valid: false,
+    data: null,
+    errors,
+  };
+}

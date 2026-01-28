@@ -7,6 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { invokeClaudeCode } from '../lib/claude.js';
+import { loadSchema, validateWithSchema } from '../lib/schema.js';
 import type { RelaisConfig } from '../types/config.js';
 import type { TickState } from '../types/state.js';
 import type { Task } from '../types/task.js';
@@ -70,63 +71,8 @@ export async function buildOrchestratorPrompt(
   return prompt;
 }
 
-/**
- * Validates a task object against the task schema (basic validation).
- *
- * @param obj - Object to validate
- * @returns True if the object appears to be a valid Task
- */
-function validateTask(obj: unknown): obj is Task {
-  if (typeof obj !== 'object' || obj === null) {
-    return false;
-  }
-
-  const task = obj as Record<string, unknown>;
-
-  // Check required fields
-  if (typeof task.task_id !== 'string' || task.task_id.length === 0) return false;
-  if (typeof task.milestone_id !== 'string' || task.milestone_id.length === 0) return false;
-  if (task.task_kind !== 'execute' && task.task_kind !== 'verify_only' && task.task_kind !== 'question') {
-    return false;
-  }
-  if (typeof task.intent !== 'string' || task.intent.length === 0) return false;
-
-  // Check scope
-  if (typeof task.scope !== 'object' || task.scope === null) return false;
-  const scope = task.scope as Record<string, unknown>;
-  if (!Array.isArray(scope.allowed_globs)) return false;
-  if (!Array.isArray(scope.forbidden_globs)) return false;
-  if (typeof scope.allow_new_files !== 'boolean') return false;
-  if (typeof scope.allow_lockfile_changes !== 'boolean') return false;
-
-  // Check diff_limits
-  if (typeof task.diff_limits !== 'object' || task.diff_limits === null) return false;
-  const diffLimits = task.diff_limits as Record<string, unknown>;
-  if (typeof diffLimits.max_files_touched !== 'number') return false;
-  if (typeof diffLimits.max_lines_changed !== 'number') return false;
-
-  // Check verification
-  if (typeof task.verification !== 'object' || task.verification === null) return false;
-  const verification = task.verification as Record<string, unknown>;
-  if (!Array.isArray(verification.fast)) return false;
-  if (!Array.isArray(verification.slow)) return false;
-
-  // Check builder
-  if (typeof task.builder !== 'object' || task.builder === null) return false;
-  const builder = task.builder as Record<string, unknown>;
-  if (builder.mode !== 'claude_code' && builder.mode !== 'patch') return false;
-  if (typeof builder.max_turns !== 'number') return false;
-  if (typeof builder.instructions !== 'string' || builder.instructions.length === 0) return false;
-
-  // Check question (required if task_kind is 'question')
-  if (task.task_kind === 'question') {
-    if (typeof task.question !== 'object' || task.question === null) return false;
-    const question = task.question as Record<string, unknown>;
-    if (typeof question.prompt !== 'string' || question.prompt.length === 0) return false;
-  }
-
-  return true;
-}
+// Cache for loaded task schema
+let taskSchemaCache: object | null = null;
 
 /**
  * Runs the orchestrator to propose the next task.
@@ -201,12 +147,31 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
       };
     }
 
-    // Validate task structure
-    if (!validateTask(parsed)) {
+    // Load task schema (cache after first load)
+    if (taskSchemaCache === null) {
+      const schemaPath = join(workspaceDir, config.orchestrator.task_schema_file);
+      try {
+        taskSchemaCache = await loadSchema(schemaPath);
+      } catch (error) {
+        return {
+          success: false,
+          task: null,
+          error: `Failed to load task schema: ${error instanceof Error ? error.message : String(error)}`,
+          rawResponse: response.result,
+        };
+      }
+    }
+
+    // Validate task structure against schema
+    const validationResult = validateWithSchema<Task>(parsed, taskSchemaCache);
+    if (!validationResult.valid) {
+      const errorMessages = validationResult.errors.length > 0
+        ? validationResult.errors.join('; ')
+        : 'Orchestrator output does not match task schema';
       return {
         success: false,
         task: null,
-        error: 'Orchestrator output does not match task schema (missing or invalid required fields)',
+        error: `Task validation failed: ${errorMessages}`,
         rawResponse: response.result,
       };
     }
