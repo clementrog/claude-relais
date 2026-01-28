@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-043",
+  "task": "WP-044",
   "milestone": "M5",
-  "branch": "task/wp-043-verify-exec",
+  "branch": "task/wp-044-param-validation",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T13:00:00Z"
+  "ts": "2026-01-28T13:10:00Z"
 }

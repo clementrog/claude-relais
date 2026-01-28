@@ -85,5 +85,9 @@ export {
   interpolateArgs,
   executeVerification,
   runVerifications,
+  validateParam,
+  validateVerificationParams,
   type VerificationRun,
+  type ParamValidationError,
+  type ParamValidationResult,
 } from './verify.js';

@@ -31,6 +31,150 @@ export interface VerificationRun {
 }
 
 /**
+ * Validation error for a single parameter.
+ */
+export interface ParamValidationError {
+  /** Name of the parameter */
+  param_name: string;
+  /** The invalid value */
+  value: string;
+  /** Reason for failure: too_long, whitespace, dotdot, or metachar */
+  reason: 'too_long' | 'whitespace' | 'dotdot' | 'metachar';
+}
+
+/**
+ * Result of parameter validation.
+ */
+export interface ParamValidationResult {
+  /** True if all parameters are valid */
+  ok: boolean;
+  /** List of validation failures */
+  errors: ParamValidationError[];
+}
+
+/**
+ * Validates a single parameter value against security constraints.
+ *
+ * Checks for:
+ * - Length exceeding max_param_len
+ * - Whitespace (if reject_whitespace_in_params is true)
+ * - Path traversal '..' (if reject_dotdot is true)
+ * - Shell metacharacters (using reject_metachars_regex)
+ *
+ * @param paramName - Name of the parameter being validated
+ * @param value - The parameter value to validate (converted to string)
+ * @param config - Verification configuration with validation rules
+ * @returns ParamValidationError if validation fails, null if valid
+ */
+export function validateParam(
+  paramName: string,
+  value: string | number | boolean | null,
+  config: VerificationConfig
+): ParamValidationError | null {
+  // Convert value to string for validation
+  const strValue = value === null ? '' : String(value);
+
+  // Check length
+  if (strValue.length > config.max_param_len) {
+    return {
+      param_name: paramName,
+      value: strValue,
+      reason: 'too_long',
+    };
+  }
+
+  // Check for whitespace if enabled
+  if (config.reject_whitespace_in_params && /\s/.test(strValue)) {
+    return {
+      param_name: paramName,
+      value: strValue,
+      reason: 'whitespace',
+    };
+  }
+
+  // Check for path traversal '..' if enabled
+  if (config.reject_dotdot) {
+    // Match: ../, ^..$, /..$
+    if (/\.\.\/|^\.\.$|\/\.\.$/.test(strValue)) {
+      return {
+        param_name: paramName,
+        value: strValue,
+        reason: 'dotdot',
+      };
+    }
+  }
+
+  // Check for shell metacharacters
+  try {
+    const metacharRegex = new RegExp(config.reject_metachars_regex);
+    if (metacharRegex.test(strValue)) {
+      return {
+        param_name: paramName,
+        value: strValue,
+        reason: 'metachar',
+      };
+    }
+  } catch (error) {
+    // If regex is invalid, treat as validation failure
+    // This shouldn't happen with valid config, but be defensive
+    return {
+      param_name: paramName,
+      value: strValue,
+      reason: 'metachar',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Validates all verification parameters for a task.
+ *
+ * Validates all parameters in task.verification.params against the security
+ * constraints defined in the verification config.
+ *
+ * @param task - Task containing verification configuration and parameters
+ * @param config - Verification configuration with validation rules
+ * @returns ParamValidationResult with ok=true if all params valid, errors otherwise
+ *
+ * @example
+ * ```typescript
+ * const result = validateVerificationParams(task, config.verification);
+ * if (!result.ok) {
+ *   // Handle validation errors
+ *   console.error('Invalid parameters:', result.errors);
+ * }
+ * ```
+ */
+export function validateVerificationParams(
+  task: Task,
+  config: VerificationConfig
+): ParamValidationResult {
+  const errors: ParamValidationError[] = [];
+  const verification = task.verification;
+  const params = verification.params ?? {};
+
+  // Validate all parameters for all templates
+  for (const [templateId, templateParams] of Object.entries(params)) {
+    for (const [paramName, paramValue] of Object.entries(templateParams)) {
+      const error = validateParam(paramName, paramValue, config);
+      if (error) {
+        // Prefix param name with template ID for clarity
+        errors.push({
+          ...error,
+          param_name: `${templateId}.${error.param_name}`,
+        });
+      }
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
+}
+
+/**
  * Interpolates parameter placeholders in command arguments.
  *
  * Replaces {{param_name}} placeholders with values from the params object.
