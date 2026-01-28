@@ -1,52 +1,56 @@
 {
   "v": 5,
-  "id": "WP-077",
-  "milestone": "M8",
-  "goal": "Implement reviewer fixture tests R101-R104",
+  "id": "WP-080",
+  "milestone": "M9",
+  "goal": "Implement task fingerprint (canonicalizeTask + sha256)",
 
   "context": {
-    "why": "Complete M8 with fixture tests that validate reviewer escalation behavior: force_patch triggers, ask_question handling, auth degradation, and repeated stop detection.",
-    "deps": ["WP-076"],
-    "extract": "From PRD Appendix C9: R101 high_risk_path_triggers_reviewer_force_patch, R102 reviewer_ask_question, R103 reviewer_missing_auth_degrades, R104 repeated_stop_triggers_reviewer."
+    "why": "Task fingerprint is used to detect identical re-dispatch loops. If orchestrator 'retries' without changing the plan, fingerprint stays same and runner stops.",
+    "deps": ["WP-077"],
+    "extract": "From Guardrails spec: Fingerprint inputs include TASK.goal, subtasks, scope.*, acceptance, verify, implementation, risk, notes. Exclude TASK.id. Use sha256(canonical_json_string). Canonical JSON has stable key order, trimmed strings."
   },
 
   "subtasks": [
-    "1. Create tests/fixtures/R101-high-risk-force-patch.test.ts",
-    "2. Create tests/fixtures/R102-reviewer-ask-question.test.ts",
-    "3. Create tests/fixtures/R103-reviewer-auth-degrades.test.ts",
-    "4. Create tests/fixtures/R104-repeated-stop-triggers.test.ts"
+    "1. Create src/lib/fingerprint.ts with canonicalizeTask function",
+    "2. Implement stable key ordering (sorted alphabetically)",
+    "3. Implement string trimming in canonical form",
+    "4. Implement computeFingerprint(task) -> sha256 hex string",
+    "5. Exclude task_id from fingerprint computation",
+    "6. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "fixtures": {
-      "R101": "Task scope includes infra/**, reviewer returns force_patch -> STOP_REVIEWER_FORCED_PATCH, builder not called",
-      "R102": "Reviewer returns ask_question -> STOP_REVIEWER_ASK_QUESTION, report includes question",
-      "R103": "Simulate codex CLI auth error -> reviewer_error recorded, force_patch_until_success set",
-      "R104": "stop_history has >=2 stops in window -> reviewer triggered on next tick"
+    "functions": {
+      "canonicalizeTask": "Returns canonical JSON string with sorted keys, trimmed strings, task_id excluded",
+      "computeFingerprint": "Returns sha256(canonicalizeTask(task)) as hex string"
     },
-    "test_approach": "Unit test the risk.ts and reviewer-flow.ts functions with mocked inputs"
+    "fingerprint_inputs": [
+      "goal", "subtasks", "scope.write", "scope.create_under", "scope.forbidden",
+      "scope.read_forbidden", "acceptance", "verify", "implementation", "risk", "notes"
+    ],
+    "excluded": ["task_id", "id", "v", "milestone", "context"]
   },
 
   "scope": {
-    "write": ["tests/fixtures/**/*.ts"],
-    "create_under": ["tests/fixtures/"],
+    "write": ["src/lib/fingerprint.ts", "src/lib/index.ts"],
+    "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "src/**"]
+    "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "All 4 reviewer fixtures (R101-R104) implemented",
-    "R101 tests force_patch decision -> STOP_REVIEWER_FORCED_PATCH",
-    "R102 tests ask_question decision -> STOP_REVIEWER_ASK_QUESTION with question",
-    "R103 tests auth failure graceful degradation",
-    "R104 tests repeated stop window triggers reviewer",
-    "pnpm test passes with all fixture tests"
+    "canonicalizeTask produces deterministic output (same task -> same string)",
+    "Key ordering is stable (alphabetical)",
+    "Whitespace/formatting differences don't change fingerprint",
+    "task_id excluded from fingerprint",
+    "computeFingerprint returns 64-char hex sha256",
+    "pnpm build succeeds"
   ],
 
-  "verify": ["pnpm build", "pnpm test run"],
-  "risk": "MED",
+  "verify": ["pnpm build"],
+  "risk": "LOW",
   "notes": [
-    "This completes M8: Review Escalation",
-    "Tests use mocks for Codex CLI - no actual API calls"
+    "Use Node.js crypto.createHash('sha256') for hashing",
+    "This is the foundation for loop detection"
   ]
 }
