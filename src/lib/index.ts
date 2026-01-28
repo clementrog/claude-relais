@@ -134,3 +134,10 @@ export {
   shouldTriggerReviewer,
   type StopHistoryEntry,
 } from './risk.js';
+
+export {
+  runReviewerIfNeeded,
+  handleReviewerDecision,
+  type ReviewerFlowContext,
+  type ReviewerFlowResult,
+} from './reviewer-flow.js';

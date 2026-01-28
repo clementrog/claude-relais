@@ -29,6 +29,8 @@ export type ReportCode =
   | 'STOP_BUILDER_OUTPUT_INVALID'
   | 'STOP_HEAD_MOVED'
   | 'STOP_INTERRUPTED'
+  | 'STOP_REVIEWER_FORCED_PATCH'
+  | 'STOP_REVIEWER_ASK_QUESTION'
   | 'BLOCKED_BUDGET_EXHAUSTED'
   | 'BLOCKED_DIRTY_WORKTREE'
   | 'BLOCKED_LOCK_HELD'
@@ -188,4 +190,6 @@ export interface ReportData {
   budgets: BudgetInfo;
   /** Optional pointers */
   pointers?: ReportPointers;
+  /** Reviewer error message (if reviewer invocation failed) */
+  reviewer_error?: string;
 }
