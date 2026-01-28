@@ -1,29 +1,34 @@
 {
   "v": 3,
-  "task": "WP-020",
+  "task": "WP-021",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Created src/types/claude.ts with ClaudeInvocation, ClaudeResponse, ClaudeError types",
-    "2. Created src/lib/claude.ts with invokeClaudeCode function",
-    "3. Implemented buildClaudeArgs() to construct CLI arguments",
-    "4. Implemented parseClaudeResponse() to extract result from JSON wrapper",
-    "5. Added timeout handling and process management",
-    "6. Exported from index files"
+    "Created src/types/task.ts with Task interface matching task.schema.json",
+    "Created src/runner/orchestrator.ts with runOrchestrator function",
+    "Implemented buildOrchestratorPrompt() to construct the user prompt",
+    "Loaded and interpolated prompt templates from relais/prompts/",
+    "Parsed orchestrator output and extracted Task JSON with basic validation",
+    "Wired orchestrator into tick.ts ORCHESTRATE phase",
+    "Exported types and functions from index files"
   ],
   "git_diff_files": [
-    "src/lib/claude.ts",
-    "src/lib/index.ts",
-    "src/types/claude.ts",
-    "src/types/index.ts"
+    "src/runner/tick.ts",
+    "src/types/index.ts",
+    "src/types/state.ts",
+    "src/runner/index.ts",
+    "src/runner/orchestrator.ts",
+    "src/types/task.ts"
   ],
   "files": {
     "changed": [
-      "src/lib/index.ts",
-      "src/types/index.ts"
+      "src/runner/tick.ts",
+      "src/types/index.ts",
+      "src/types/state.ts"
     ],
     "created": [
-      "src/lib/claude.ts",
-      "src/types/claude.ts"
+      "src/types/task.ts",
+      "src/runner/orchestrator.ts",
+      "src/runner/index.ts"
     ],
     "deleted": []
   },
@@ -34,6 +39,11 @@
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [],
+  "notes": [
+    "Used placeholder values for prompt interpolation placeholders as noted in task requirements",
+    "Basic task validation implemented (checks required fields and types)",
+    "Full Ajv validation can be added later as noted in task requirements",
+    "Updated state.ts to import Task from task.ts instead of defining its own"
+  ],
   "blockers": []
 }

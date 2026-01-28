@@ -1,85 +1,91 @@
 {
   "v": 5,
-  "id": "WP-020",
+  "id": "WP-021",
   "milestone": "M3",
-  "goal": "Create Claude Code CLI wrapper for invoking claude with proper flags",
+  "goal": "Implement orchestrator invocation using Claude Code in plan mode",
 
   "context": {
-    "why": "Relais invokes Claude Code CLI in non-interactive mode with specific flags. Need a clean wrapper to handle invocation, output parsing, and error handling.",
-    "deps": ["WP-010"],
-    "extract": "From PRD: claude -p --output-format json --max-turns N --no-session-persistence --permission-mode MODE --model MODEL --allowedTools TOOLS. Parse stdout JSON, then parse stdout_json.result as the actual model text."
+    "why": "The orchestrator (Brain) proposes tasks. It runs in plan mode (no tool execution) and outputs JSON matching task.schema.json.",
+    "deps": ["WP-020"],
+    "extract": "From PRD Section 8: Orchestrator uses --permission-mode plan, --max-turns 1, outputs ONLY a JSON object that validates against task.schema.json."
   },
 
   "subtasks": [
-    "1. Create src/types/claude.ts with ClaudeInvocation, ClaudeResponse, ClaudeError types",
-    "2. Create src/lib/claude.ts with invokeClaudeCode function",
-    "3. Implement buildClaudeArgs() to construct CLI arguments",
-    "4. Implement parseClaudeResponse() to extract result from JSON wrapper",
-    "5. Add timeout handling and process management",
-    "6. Export from index files"
+    "1. Create src/types/task.ts with Task interface matching task.schema.json",
+    "2. Create src/runner/orchestrator.ts with runOrchestrator function",
+    "3. Implement buildOrchestratorPrompt() to construct the user prompt",
+    "4. Load and interpolate prompt templates from relais/prompts/",
+    "5. Parse orchestrator output and extract Task JSON",
+    "6. Wire into tick.ts ORCHESTRATE phase",
+    "7. Export from index files"
   ],
 
   "implementation": {
-    "ClaudeInvocation": {
-      "prompt": "string - the prompt to send",
-      "maxTurns": "number - max agentic turns",
-      "permissionMode": "'plan' | 'bypassPermissions'",
-      "model": "string - model alias or full name",
-      "allowedTools": "string | undefined - comma-separated tool list",
-      "systemPrompt": "string | undefined - system prompt file path",
-      "timeout": "number - timeout in ms"
+    "Task": {
+      "note": "Match task.schema.json structure",
+      "fields": {
+        "task_id": "string",
+        "milestone_id": "string",
+        "task_kind": "'execute' | 'verify_only' | 'question'",
+        "intent": "string",
+        "question": "optional object with prompt and choices",
+        "scope": "{ allowed_globs, forbidden_globs, allow_new_files, allow_lockfile_changes }",
+        "diff_limits": "{ max_files_touched, max_lines_changed }",
+        "verification": "{ fast: string[], slow: string[], params?: object }",
+        "builder": "{ mode, max_turns, instructions, patch? }"
+      }
     },
-    "ClaudeResponse": {
-      "success": "boolean",
-      "result": "string | null - the model's text output",
-      "raw": "object - full JSON response",
-      "exitCode": "number",
-      "durationMs": "number"
-    },
-    "invokeClaudeCode": {
-      "signature": "async function invokeClaudeCode(config: ClaudeCodeCliConfig, invocation: ClaudeInvocation): Promise<ClaudeResponse>",
+    "runOrchestrator": {
+      "signature": "async function runOrchestrator(state: TickState): Promise<OrchestratorResult>",
       "behavior": [
-        "1. Build args array from config + invocation",
-        "2. Spawn process with timeout",
-        "3. Capture stdout/stderr",
-        "4. Parse JSON wrapper from stdout",
-        "5. Extract .result field as model output",
-        "6. Return ClaudeResponse with parsed data"
+        "1. Load system prompt from config.orchestrator.system_prompt_file",
+        "2. Build user prompt with context (facts, last report, budgets)",
+        "3. Invoke Claude Code with plan mode, max-turns 1",
+        "4. Parse response as JSON",
+        "5. Validate against task schema (basic validation)",
+        "6. Return OrchestratorResult with task or error"
       ]
     },
-    "CLI_FLAGS": {
-      "-p": "prompt mode (non-interactive)",
-      "--output-format": "json",
-      "--max-turns": "from invocation",
-      "--no-session-persistence": "always",
-      "--permission-mode": "plan or bypassPermissions",
-      "--model": "from invocation",
-      "--allowedTools": "from invocation (optional)",
-      "--system-prompt": "from invocation (optional)"
+    "OrchestratorResult": {
+      "success": "boolean",
+      "task": "Task | null",
+      "error": "string | null",
+      "rawResponse": "string"
+    },
+    "promptInterpolation": {
+      "placeholders": [
+        "{{PROJECT_GOAL}}",
+        "{{MILESTONE_ID}}",
+        "{{BUDGETS_SUMMARY}}",
+        "{{VERIFY_TEMPLATE_IDS}}",
+        "{{REPO_SUMMARY}}",
+        "{{FACTS_MD}}",
+        "{{LAST_REPORT_MD}}",
+        "{{BLOCKED_JSON_OR_EMPTY}}"
+      ]
     }
   },
 
   "scope": {
-    "write": [],
-    "create_under": ["src/types", "src/lib"],
+    "write": ["src/runner/tick.ts"],
+    "create_under": ["src/types", "src/runner"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "src/types/claude.ts exists with ClaudeInvocation, ClaudeResponse types",
-    "src/lib/claude.ts exists with invokeClaudeCode function",
-    "buildClaudeArgs returns correct CLI flags",
-    "parseClaudeResponse extracts .result from JSON wrapper",
-    "Timeout handling works correctly",
+    "src/types/task.ts exists with Task interface",
+    "src/runner/orchestrator.ts exists with runOrchestrator",
+    "Prompt templates are loaded and interpolated",
+    "ORCHESTRATE phase in tick.ts calls runOrchestrator",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "MED",
   "notes": [
-    "Use child_process.spawn for process management",
-    "The JSON wrapper has format: { result: 'model output', ... }",
-    "Handle both successful completion and timeout/error cases"
+    "For now, use placeholder values for prompt interpolation",
+    "Schema validation can be basic (check required fields)",
+    "Full Ajv validation can be added later"
   ]
 }

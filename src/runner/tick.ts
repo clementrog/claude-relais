@@ -19,6 +19,7 @@ import {
   transitionPhase,
   addError,
 } from '../lib/state.js';
+import { runOrchestrator } from './orchestrator.js';
 
 /**
  * Generates a basic report from tick state.
@@ -190,11 +191,35 @@ export async function runTick(config: RelaisConfig): Promise<ReportData> {
 
     console.log(`[${TickPhase.PREFLIGHT}] Preflight passed (base: ${state.base_commit})`);
 
-    // Phase 3: ORCHESTRATE (placeholder)
-    console.log(`[${TickPhase.ORCHESTRATE}] Orchestrate phase (not yet implemented)`);
+    // Phase 3: ORCHESTRATE
+    console.log(`[${TickPhase.ORCHESTRATE}] Running orchestrator...`);
     state = transitionPhase(state, TickPhase.ORCHESTRATE);
-    // Placeholder: Full implementation in M3
-    console.log(`[${TickPhase.ORCHESTRATE}] Orchestrate not implemented - skipping`);
+    const orchestratorResult = await runOrchestrator(state);
+
+    if (!orchestratorResult.success || !orchestratorResult.task) {
+      // Orchestrator failed - release lock and return blocked report
+      if (lockAcquired) {
+        await releaseLock(lockPath);
+        lockAcquired = false;
+      }
+
+      const report = generateReport(
+        {
+          ...state,
+          errors: orchestratorResult.error ? [orchestratorResult.error] : [],
+        },
+        'BLOCKED_ORCHESTRATOR_OUTPUT_INVALID',
+        'blocked'
+      );
+      return report;
+    }
+
+    // Update state with the task from orchestrator
+    state = {
+      ...state,
+      task: orchestratorResult.task,
+    };
+    console.log(`[${TickPhase.ORCHESTRATE}] Task proposed: ${orchestratorResult.task.task_id} (${orchestratorResult.task.task_kind})`);
 
     // Phase 4: BUILD (placeholder)
     console.log(`[${TickPhase.BUILD}] Build phase (not yet implemented)`);

@@ -6,6 +6,7 @@
  */
 
 import type { RelaisConfig } from './config.js';
+import type { Task } from './task.js';
 
 /**
  * Phases of the tick state machine.
@@ -18,46 +19,6 @@ export enum TickPhase {
   JUDGE = 'JUDGE',
   REPORT = 'REPORT',
   END = 'END',
-}
-
-/**
- * Task structure from orchestrator (placeholder - full type will be defined later).
- */
-export interface Task {
-  task_id: string;
-  milestone_id: string;
-  task_kind: 'execute' | 'verify_only' | 'question';
-  intent: string;
-  scope: {
-    allowed_globs: string[];
-    forbidden_globs: string[];
-    allow_new_files: boolean;
-    allow_lockfile_changes: boolean;
-  };
-  diff_limits: {
-    max_files_touched: number;
-    max_lines_changed: number;
-  };
-  verification: {
-    exec_mode: 'argv_no_shell';
-    runs: Array<{
-      template_id: string;
-      phase: 'fast' | 'slow';
-      cmd: string;
-      args: string[];
-      exit_code: number;
-      duration_ms: number;
-      timed_out: boolean;
-    }>;
-    verify_log_path: string;
-  };
-  builder: {
-    mode: 'claude_code' | 'patch';
-  };
-  question?: {
-    prompt: string;
-    choices?: string[];
-  };
 }
 
 /**

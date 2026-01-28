@@ -36,9 +36,18 @@ export {
 export type {
   TickState,
   TickContext,
-  Task,
   BuilderResult,
 } from './state.js';
+
+export type {
+  Task,
+  TaskKind,
+  Question,
+  TaskScope,
+  DiffLimits as TaskDiffLimits,
+  TaskVerification,
+  TaskBuilder,
+} from './task.js';
 
 export type {
   Verdict,

@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "DISPATCH",
   "mode": "single",
-  "task": "WP-020",
+  "task": "WP-021",
   "milestone": "M3",
-  "branch": "task/wp-020-claude-cli-wrapper",
+  "branch": "task/wp-021-orchestrator",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "BUILD",
-  "ts": "2026-01-28T11:15:00Z"
+  "ts": "2026-01-28T11:25:00Z"
 }
