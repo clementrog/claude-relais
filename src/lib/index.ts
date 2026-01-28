@@ -18,3 +18,12 @@ export {
   ConfigError,
   CONFIG_FILE_NAME,
 } from './config.js';
+
+export {
+  getBootId,
+  isPidRunning,
+  isLockStale,
+  acquireLock,
+  releaseLock,
+  LockHeldError,
+} from './lock.js';

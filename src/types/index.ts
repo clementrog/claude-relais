@@ -24,3 +24,5 @@ export type {
   BudgetsConfig,
   HistoryConfig,
 } from './config.js';
+
+export type { LockInfo } from './lock.js';
