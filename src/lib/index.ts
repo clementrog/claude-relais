@@ -166,8 +166,10 @@ export {
   checkWorktreeClean,
   runGuardrailPreflight,
   classifyVerifyResult,
+  shouldEscalate,
   type GuardrailState,
   type PreflightResult as GuardrailPreflightResult,
   type VerifyResultType,
   type VerifyClassification,
+  type EscalationDecision,
 } from './guardrails.js';

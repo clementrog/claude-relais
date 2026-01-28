@@ -11,6 +11,8 @@
 
 import type { ReportCode } from '../types/report.js';
 import type { Task } from '../types/task.js';
+import type { TickState } from '../types/state.js';
+import type { RelaisConfig } from '../types/config.js';
 import { getCurrentBranch, isWorktreeClean } from './git.js';
 import { computeFingerprint } from './fingerprint.js';
 
@@ -200,6 +202,103 @@ export function runGuardrailPreflight(
 
   // All checks passed
   return { ok: true };
+}
+
+/**
+ * Escalation decision result.
+ */
+export interface EscalationDecision {
+  /** Escalation mode: 'none' (no escalation), 'reviewer' (escalate to reviewer), or 'human' (escalate to human) */
+  mode: 'none' | 'reviewer' | 'human';
+  /** Human-readable reason explaining why escalation was triggered (or why it wasn't) */
+  reason: string;
+}
+
+/**
+ * Determines if escalation should be triggered based on failure streak and stop history.
+ *
+ * Escalation triggers:
+ * - failure_streak >= 2: After 2 consecutive failures, escalate instead of allowing a third normal retry
+ * - stop_history window: If STOPs in last stop_window_ticks >= max_stops_in_window, escalate
+ * - Risk level: MED/HIGH tasks with verify failures may have stricter thresholds (not yet implemented - requires risk field in Task)
+ *
+ * Escalation mode selection:
+ * - If reviewer is enabled in config → mode is 'reviewer'
+ * - Otherwise → mode is 'human'
+ *
+ * @param state - Current tick state containing failure_streak and stop_history
+ * @param config - Relais configuration containing escalation settings
+ * @param currentTick - Current tick number (for stop window calculation)
+ * @returns EscalationDecision with mode and reason
+ *
+ * @example
+ * ```typescript
+ * const decision = shouldEscalate(state, config, 10);
+ * if (decision.mode !== 'none') {
+ *   console.log(`Escalation required: ${decision.mode} - ${decision.reason}`);
+ * }
+ * ```
+ */
+export function shouldEscalate(
+  state: TickState,
+  config: RelaisConfig,
+  currentTick: number
+): EscalationDecision {
+  const failureStreak = state.failure_streak ?? 0;
+  const stopHistory = state.guardrail?.stop_history ?? [];
+
+  // Check failure streak >= 2
+  if (failureStreak >= 2) {
+    const reviewerEnabled = config.reviewer?.enabled ?? false;
+    const mode = reviewerEnabled ? 'reviewer' : 'human';
+    return {
+      mode,
+      reason: `Failure streak is ${failureStreak} (>= 2). Escalating to prevent infinite retry loops.`,
+    };
+  }
+
+  // Check stop history window
+  const reviewerConfig = config.reviewer;
+  if (
+    reviewerConfig?.trigger?.on_repeated_stop &&
+    reviewerConfig.trigger.stop_window_ticks > 0 &&
+    reviewerConfig.trigger.max_stops_in_window > 0
+  ) {
+    const windowTicks = reviewerConfig.trigger.stop_window_ticks;
+    const maxStops = reviewerConfig.trigger.max_stops_in_window;
+
+    // Count stops in recent history
+    // Since stop_history entries don't have tick numbers, we count the last N entries
+    // where N = windowTicks (approximating ticks with entries)
+    // This is a reasonable approximation: if we have >= maxStops entries in the window,
+    // we've exceeded the threshold
+    const recentStops = stopHistory.slice(-windowTicks);
+
+    if (recentStops.length >= maxStops) {
+      const reviewerEnabled = reviewerConfig.enabled ?? false;
+      const mode = reviewerEnabled ? 'reviewer' : 'human';
+      return {
+        mode,
+        reason: `Found ${recentStops.length} stops in last ${windowTicks} entries (>= ${maxStops}). Escalating to prevent repeated failures.`,
+      };
+    }
+  }
+
+  // Risk level check (MED/HIGH with verify failure)
+  // Note: This requires a risk field in Task which is not yet in the schema.
+  // For now, we skip this check. When risk is added to Task, we can check:
+  // if (task.risk === 'MED' || task.risk === 'HIGH') {
+  //   const verifyFailed = state.verify_history?.some(e => e.result === 'FAIL') ?? false;
+  //   if (verifyFailed) {
+  //     return { mode: reviewerEnabled ? 'reviewer' : 'human', reason: 'MED/HIGH risk task with verify failure' };
+  //   }
+  // }
+
+  // No escalation needed
+  return {
+    mode: 'none',
+    reason: 'No escalation triggers detected. Failure streak and stop history are within acceptable limits.',
+  };
 }
 
 /**

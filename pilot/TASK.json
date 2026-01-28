@@ -1,36 +1,32 @@
 {
   "v": 5,
-  "id": "WP-084",
+  "id": "WP-085",
   "milestone": "M9",
-  "goal": "Implement verify result classification",
+  "goal": "Implement escalation logic (shouldEscalate, 2-failure gate)",
 
   "context": {
-    "why": "Verify commands need proper classification into PASS/FAIL/TIMEOUT with corresponding STOP code mapping. Timeouts must map to STOP_VERIFY_FLAKY_OR_TIMEOUT.",
-    "deps": ["WP-083"],
-    "extract": "From Guardrails spec RUN-02: Verify produces PASS (exit 0 within timeout), FAIL (exit != 0), TIMEOUT (exceeded timeout). TIMEOUT always maps to STOP_VERIFY_FLAKY_OR_TIMEOUT and increments failure_streak."
+    "why": "After 2 failures or repeated STOPs in window, must escalate to reviewer/human instead of allowing a third normal retry.",
+    "deps": ["WP-084"],
+    "extract": "From Guardrails spec ORCH-02: When failure_streak >= 2, orchestrator must not dispatch third normal retry. Instead escalate. RUN-04: If STOPs in last stop_window_ticks >= max_stops_in_window, set escalation.mode."
   },
 
   "subtasks": [
-    "1. Add VerifyResultType type ('PASS' | 'FAIL' | 'TIMEOUT') to src/types/state.ts if not exists",
-    "2. Create classifyVerifyResult function in src/lib/guardrails.ts",
-    "3. Map exit code + timeout flag to result type",
-    "4. Map result type to STOP code (TIMEOUT -> STOP_VERIFY_FLAKY_OR_TIMEOUT)",
-    "5. Return classification with stopCode and shouldIncrementFailureStreak",
+    "1. Create shouldEscalate function in src/lib/guardrails.ts",
+    "2. Check failure_streak >= 2 -> escalate",
+    "3. Check stop_history window (count STOPs in last N ticks)",
+    "4. Check risk level (MED/HIGH may have stricter thresholds)",
+    "5. Return EscalationDecision with mode (none/reviewer/human) and reason",
     "6. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "function": "classifyVerifyResult(exitCode: number, timedOut: boolean, durationMs: number) -> VerifyClassification",
-    "classification": {
-      "PASS": "exitCode === 0 && !timedOut",
-      "FAIL": "exitCode !== 0 && !timedOut",
-      "TIMEOUT": "timedOut === true"
-    },
-    "stop_mapping": {
-      "PASS": "null (no stop)",
-      "FAIL": "STOP_VERIFY_FAILED_FAST or STOP_VERIFY_FAILED_SLOW",
-      "TIMEOUT": "STOP_VERIFY_FLAKY_OR_TIMEOUT"
-    }
+    "function": "shouldEscalate(state, config) -> EscalationDecision",
+    "triggers": [
+      "failure_streak >= 2",
+      "stop_history count in window >= max_stops_in_window",
+      "MED/HIGH task with verify failure"
+    ],
+    "return_type": "EscalationDecision = { mode: 'none'|'reviewer'|'human', reason: string }"
   },
 
   "scope": {
@@ -41,18 +37,18 @@
   },
 
   "acceptance": [
-    "classifyVerifyResult returns VerifyClassification",
-    "Exit 0 within timeout -> PASS",
-    "Exit != 0 within timeout -> FAIL",
-    "Timeout -> TIMEOUT with STOP_VERIFY_FLAKY_OR_TIMEOUT",
-    "Classification includes shouldIncrementFailureStreak flag",
+    "shouldEscalate returns EscalationDecision",
+    "failure_streak >= 2 triggers escalation",
+    "Stop window threshold triggers escalation",
+    "Mode is reviewer if enabled, else human",
+    "Reason string explains why escalation triggered",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "LOW",
+  "risk": "MED",
   "notes": [
-    "TIMEOUT always increments failure_streak",
-    "FAIL may or may not increment based on config"
+    "Integrates with existing checkRepeatedStops from risk.ts",
+    "Escalation prevents infinite retry loops"
   ]
 }
