@@ -1,54 +1,52 @@
 {
   "v": 5,
-  "id": "WP-071",
+  "id": "WP-072",
   "milestone": "M8",
-  "goal": "Implement Codex CLI wrapper for reviewer invocation",
+  "goal": "Create reviewer_result.schema.json and reviewer prompts",
 
   "context": {
-    "why": "The reviewer uses Codex CLI to call a 'Second Brain' model. This wrapper handles invocation, auth detection, output parsing, and graceful failure handling.",
-    "deps": ["WP-070"],
-    "extract": "From PRD Appendix C6: Codex CLI invocation with system+user prompts, output parsing (JSON wrapper with result string, or direct JSON), auth failure handling. If reviewer fails, append reviewer_error to report and degrade gracefully."
+    "why": "The reviewer needs a JSON schema for validating its output and prompts to guide its decisions (proceed, force_patch, ask_question).",
+    "deps": ["WP-071"],
+    "extract": "From PRD Appendix C5: reviewer_result.schema.json with decision enum, reason_short, optional risk_flags array, optional patch_hint, optional question object. System prompt defines reviewer role, user prompt template has RISK_FLAGS, TASK_JSON, LAST_REPORT_MD, DIFF_PATCH, VERIFY_LOG, TOUCHED_PATHS placeholders."
   },
 
   "subtasks": [
-    "1. Create src/lib/reviewer.ts with CodexCliWrapper",
-    "2. Implement invokeReviewer(config, context) -> ReviewerResult | ReviewerError",
-    "3. Implement output parsing: try wrapper.result, then direct JSON, validate against schema",
-    "4. Implement auth detection: check CODEX_API_KEY env var presence",
-    "5. Add ReviewerResult and ReviewerError types to src/types/reviewer.ts",
-    "6. Export from src/lib/index.ts and src/types/index.ts"
+    "1. Create relais/schemas/reviewer_result.schema.json per C5.1",
+    "2. Create relais/prompts/reviewer.system.txt per C5.2",
+    "3. Create relais/prompts/reviewer.user.txt per C5.3"
   ],
 
   "implementation": {
-    "files": {
-      "src/lib/reviewer.ts": "invokeReviewer, parseReviewerOutput, checkReviewerAuth",
-      "src/types/reviewer.ts": "ReviewerResult, ReviewerError, ReviewerContext types"
+    "schema": {
+      "required": ["decision", "reason_short"],
+      "decision_enum": ["proceed", "force_patch", "ask_question"],
+      "conditional": "if decision=ask_question then question required"
     },
-    "cli_contract": "codex -p <prompt> --model <model> --max-turns 1",
-    "output_parsing": "1) parse stdout as JSON, 2) if has .result string, parse that, 3) validate against reviewer_result schema"
+    "prompts": {
+      "system": "Define reviewer role, hard rules (JSON only, read-only, safety first), decision meanings",
+      "user": "Template with {{RISK_FLAGS}}, {{TASK_JSON}}, {{LAST_REPORT_MD}}, {{DIFF_PATCH_OR_EMPTY}}, {{VERIFY_LOG_EXCERPT_OR_EMPTY}}, {{TOUCHED_PATHS}}"
+    }
   },
 
   "scope": {
-    "write": ["src/lib/reviewer.ts", "src/types/reviewer.ts", "src/lib/index.ts", "src/types/index.ts"],
-    "create_under": ["src/lib/", "src/types/"],
+    "write": ["relais/schemas/reviewer_result.schema.json", "relais/prompts/reviewer.system.txt", "relais/prompts/reviewer.user.txt"],
+    "create_under": ["relais/schemas/", "relais/prompts/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "tests/**"]
+    "forbidden": ["pilot/*", "src/**", "tests/**"]
   },
 
   "acceptance": [
-    "invokeReviewer function implemented with spawn (shell:false)",
-    "Output parsing handles both wrapper.result and direct JSON",
-    "Auth check returns status based on CODEX_API_KEY presence",
-    "Graceful error handling returns ReviewerError on failure",
-    "Types exported correctly",
-    "pnpm build succeeds"
+    "reviewer_result.schema.json validates decision, reason_short, risk_flags, patch_hint, question",
+    "Schema has conditional: ask_question requires question object",
+    "reviewer.system.txt defines role and hard rules",
+    "reviewer.user.txt has all 6 template placeholders",
+    "JSON schema is valid (can be parsed)"
   ],
 
-  "verify": ["pnpm build"],
-  "risk": "MED",
+  "verify": ["node -e \"require('./relais/schemas/reviewer_result.schema.json')\""],
+  "risk": "LOW",
   "notes": [
-    "Similar pattern to src/lib/claude.ts but for Codex CLI",
-    "Reviewer is read-only, never modifies files",
-    "Auth check is best-effort (env var presence only for V1)"
+    "Follow existing schema style in relais/schemas/",
+    "Follow existing prompt style in relais/prompts/"
   ]
 }
