@@ -75,3 +75,11 @@ export type {
 } from './claude.js';
 
 export { ClaudeError } from './claude.js';
+
+export type {
+  ReviewerInvocationConfig,
+  ReviewerContext,
+  ReviewerInvocationResult,
+  ReviewerResult,
+  ReviewerError,
+} from './reviewer.js';
