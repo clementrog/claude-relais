@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-052",
+  "task": "WP-053",
   "milestone": "M6",
-  "branch": "task/wp-052-history",
+  "branch": "task/wp-053-blocked-json",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T13:50:00Z"
+  "ts": "2026-01-28T14:00:00Z"
 }

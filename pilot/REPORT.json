@@ -1,20 +1,31 @@
 {
   "v": 3,
-  "task": "WP-052",
+  "task": "WP-053",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Created src/lib/history.ts module for history management",
-    "2. Implemented createHistorySnapshot(runId, config): creates history/<run_id>/ directory",
-    "3. Implemented writeHistoryArtifact(runId, filename, content): writes artifact to history",
-    "4. Implemented snapshotRun(runId, report, markdown, diffPatch, verifyLog): saves all artifacts",
-    "5. Created meta.json with run_id, created_at, verdict, code",
-    "6. Implemented getHistoryCount(config): counts existing history entries",
-    "7. Exported from src/lib/index.ts"
+    "Created src/types/blocked.ts with BlockedData interface",
+    "Created src/lib/blocked.ts module for BLOCKED.json generation",
+    "Implemented buildBlockedData(code, reason, remediation) function",
+    "Implemented writeBlocked(data, path) function with atomic write",
+    "Defined remediation messages for each BLOCKED code",
+    "Exported BlockedData from src/types/index.ts",
+    "Exported buildBlockedData and writeBlocked from src/lib/index.ts"
   ],
-  "git_diff_files": ["src/lib/history.ts", "src/lib/index.ts"],
+  "git_diff_files": [
+    "src/lib/blocked.ts",
+    "src/lib/index.ts",
+    "src/types/blocked.ts",
+    "src/types/index.ts"
+  ],
   "files": {
-    "changed": ["src/lib/index.ts"],
-    "created": ["src/lib/history.ts"],
+    "changed": [
+      "src/lib/index.ts",
+      "src/types/index.ts"
+    ],
+    "created": [
+      "src/lib/blocked.ts",
+      "src/types/blocked.ts"
+    ],
     "deleted": []
   },
   "verify": [
@@ -25,9 +36,9 @@
     }
   ],
   "notes": [
-    "History snapshots use atomic writes for crash safety",
-    "Optional artifacts (diff.patch, verify.log) are only written if provided and enabled in config",
-    "getHistoryCount handles missing history directory gracefully by returning 0"
+    "BLOCKED.json generation is now available for preflight failures",
+    "Remediation messages are defined for all 7 BLOCKED codes including BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
+    "writeBlocked uses atomicWriteJson for crash-safe writes"
   ],
   "blockers": []
 }

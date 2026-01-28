@@ -114,3 +114,8 @@ export {
   snapshotRun,
   getHistoryCount,
 } from './history.js';
+
+export {
+  buildBlockedData,
+  writeBlocked,
+} from './blocked.js';

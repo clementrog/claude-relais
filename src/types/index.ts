@@ -29,6 +29,8 @@ export type { LockInfo } from './lock.js';
 
 export type { BlockedCode, PreflightResult } from './preflight.js';
 
+export type { BlockedData } from './blocked.js';
+
 export {
   TickPhase,
 } from './state.js';

@@ -1,64 +1,61 @@
 {
   "v": 5,
-  "id": "WP-052",
+  "id": "WP-053",
   "milestone": "M6",
-  "goal": "Implement history snapshots for tick run artifacts",
+  "goal": "Implement BLOCKED.json generation for preflight failures",
 
   "context": {
-    "why": "Each tick's artifacts (report.json, report.md, diff.patch, verify.log) must be preserved in history/<run_id>/. This enables debugging and audit trails. Cap enforced only at preflight.",
-    "deps": ["WP-050", "WP-051"],
-    "extract": "From PRD Section 14: History snapshots are kept at history/<run_id>/{meta.json, report.json, report.md, diff.patch, verify.log}. History cap enforced at preflight only."
+    "why": "When runner cannot safely start (missing config, dirty worktree, lock held, etc.), it must write BLOCKED.json explaining the exact remediation required. This helps users understand why the tick cannot proceed.",
+    "deps": [],
+    "extract": "From PRD: BLOCKED = 'cannot safely start'. Runner must write BLOCKED.json explaining exact remediation. Codes: BLOCKED_BUDGET_EXHAUSTED, BLOCKED_DIRTY_WORKTREE, BLOCKED_LOCK_HELD, BLOCKED_CRASH_RECOVERY_REQUIRED, BLOCKED_ORCHESTRATOR_OUTPUT_INVALID, BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED, BLOCKED_MISSING_CONFIG."
   },
 
   "subtasks": [
-    "1. Create src/lib/history.ts module for history management",
-    "2. Implement createHistorySnapshot(runId, config): creates history/<run_id>/ directory",
-    "3. Implement writeHistoryArtifact(runId, filename, content): writes artifact to history",
-    "4. Implement snapshotRun(runId, report, markdown, diffPatch, verifyLog): saves all artifacts",
-    "5. Create meta.json with run_id, created_at, verdict, code",
-    "6. Implement getHistoryCount(config): counts existing history entries",
-    "7. Export from src/lib/index.ts"
+    "1. Create src/types/blocked.ts with BlockedData interface",
+    "2. Create src/lib/blocked.ts module for BLOCKED.json generation",
+    "3. Implement buildBlockedData(code, reason, remediation): constructs BlockedData",
+    "4. Implement writeBlocked(data, path): writes BLOCKED.json atomically",
+    "5. Define remediation messages for each BLOCKED code",
+    "6. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "history_structure": {
-      "path": "relais/history/<run_id>/",
-      "files": [
-        "meta.json - run_id, created_at, verdict, code",
-        "report.json - full report data",
-        "report.md - markdown rendering",
-        "diff.patch - git diff patch (optional)",
-        "verify.log - verification output (optional)"
-      ]
+    "BlockedData_interface": {
+      "blocked_at": "string - ISO datetime",
+      "code": "string - BLOCKED_* code",
+      "reason": "string - human-readable explanation",
+      "remediation": "string - what user should do to fix"
     },
-    "meta_json": {
-      "run_id": "string",
-      "created_at": "string (ISO datetime)",
-      "verdict": "success | stop | blocked",
-      "code": "string"
-    }
+    "blocked_codes": [
+      "BLOCKED_MISSING_CONFIG - relais.config.json missing or unreadable",
+      "BLOCKED_DIRTY_WORKTREE - uncommitted changes in worktree",
+      "BLOCKED_LOCK_HELD - another process holds the lock",
+      "BLOCKED_CRASH_RECOVERY_REQUIRED - manual cleanup needed",
+      "BLOCKED_BUDGET_EXHAUSTED - milestone budgets exceeded",
+      "BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED - history > max_runs",
+      "BLOCKED_ORCHESTRATOR_OUTPUT_INVALID - orchestrator returned invalid JSON after retry"
+    ]
   },
 
   "scope": {
-    "write": ["src/lib/history.ts", "src/lib/index.ts"],
-    "create_under": ["src/lib/"],
+    "write": ["src/types/blocked.ts", "src/lib/blocked.ts", "src/lib/index.ts"],
+    "create_under": ["src/types/", "src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "createHistorySnapshot creates directory structure",
-    "snapshotRun writes all artifacts to history/<run_id>/",
-    "meta.json contains correct metadata",
-    "Optional artifacts (diff.patch, verify.log) handled gracefully",
-    "getHistoryCount returns accurate count",
+    "BlockedData interface defined with required fields",
+    "buildBlockedData constructs complete blocked data",
+    "writeBlocked uses atomic write",
+    "Each BLOCKED code has a corresponding remediation message",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "History cap checking is done in preflight (WP-013), not here",
-    "Use atomic writes where possible for crash safety"
+    "BLOCKED.json is written when tick cannot start",
+    "Remediation messages should be actionable"
   ]
 }
