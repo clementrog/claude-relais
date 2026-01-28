@@ -1,56 +1,58 @@
 {
   "v": 5,
-  "id": "WP-080",
+  "id": "WP-081",
   "milestone": "M9",
-  "goal": "Implement task fingerprint (canonicalizeTask + sha256)",
+  "goal": "Add new guardrail STOP codes",
 
   "context": {
-    "why": "Task fingerprint is used to detect identical re-dispatch loops. If orchestrator 'retries' without changing the plan, fingerprint stays same and runner stops.",
-    "deps": ["WP-077"],
-    "extract": "From Guardrails spec: Fingerprint inputs include TASK.goal, subtasks, scope.*, acceptance, verify, implementation, risk, notes. Exclude TASK.id. Use sha256(canonical_json_string). Canonical JSON has stable key order, trimmed strings."
+    "why": "Guardrails require new STOP codes for loop detection, timeout classification, and merge safety.",
+    "deps": ["WP-080"],
+    "extract": "From Guardrails spec: STOP_REDISPATCH_IDENTICAL_TASK (same fingerprint after failure), STOP_VERIFY_FLAKY_OR_TIMEOUT (verify timeout/flaky), STOP_MERGE_DIRTY_WORKTREE (dirty worktree at merge), STOP_BRANCH_MISMATCH (wrong branch), STOP_EVIDENCE_INCOMPLETE (missing evidence for MED/HIGH)."
   },
 
   "subtasks": [
-    "1. Create src/lib/fingerprint.ts with canonicalizeTask function",
-    "2. Implement stable key ordering (sorted alphabetically)",
-    "3. Implement string trimming in canonical form",
-    "4. Implement computeFingerprint(task) -> sha256 hex string",
-    "5. Exclude task_id from fingerprint computation",
-    "6. Export from src/lib/index.ts"
+    "1. Add STOP_REDISPATCH_IDENTICAL_TASK to StopCode in src/types/report.ts",
+    "2. Add STOP_VERIFY_FLAKY_OR_TIMEOUT to StopCode",
+    "3. Add STOP_MERGE_DIRTY_WORKTREE to StopCode",
+    "4. Add STOP_BRANCH_MISMATCH to StopCode",
+    "5. Add STOP_EVIDENCE_INCOMPLETE to StopCode",
+    "6. Update relais/schemas/report.schema.json with new codes"
   ],
 
   "implementation": {
-    "functions": {
-      "canonicalizeTask": "Returns canonical JSON string with sorted keys, trimmed strings, task_id excluded",
-      "computeFingerprint": "Returns sha256(canonicalizeTask(task)) as hex string"
-    },
-    "fingerprint_inputs": [
-      "goal", "subtasks", "scope.write", "scope.create_under", "scope.forbidden",
-      "scope.read_forbidden", "acceptance", "verify", "implementation", "risk", "notes"
+    "new_codes": [
+      "STOP_REDISPATCH_IDENTICAL_TASK",
+      "STOP_VERIFY_FLAKY_OR_TIMEOUT",
+      "STOP_MERGE_DIRTY_WORKTREE",
+      "STOP_BRANCH_MISMATCH",
+      "STOP_EVIDENCE_INCOMPLETE"
     ],
-    "excluded": ["task_id", "id", "v", "milestone", "context"]
+    "meanings": {
+      "STOP_REDISPATCH_IDENTICAL_TASK": "Next TASK fingerprint equals last failed fingerprint",
+      "STOP_VERIFY_FLAKY_OR_TIMEOUT": "Verify command timed out or classified as flaky",
+      "STOP_MERGE_DIRTY_WORKTREE": "Worktree not clean when attempting merge",
+      "STOP_BRANCH_MISMATCH": "Current branch doesn't match STATE.branch",
+      "STOP_EVIDENCE_INCOMPLETE": "MED/HIGH task missing required evidence in REPORT"
+    }
   },
 
   "scope": {
-    "write": ["src/lib/fingerprint.ts", "src/lib/index.ts"],
-    "create_under": ["src/lib/"],
+    "write": ["src/types/report.ts", "relais/schemas/report.schema.json"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "tests/**"]
+    "forbidden": ["pilot/*", "src/lib/**", "tests/**"]
   },
 
   "acceptance": [
-    "canonicalizeTask produces deterministic output (same task -> same string)",
-    "Key ordering is stable (alphabetical)",
-    "Whitespace/formatting differences don't change fingerprint",
-    "task_id excluded from fingerprint",
-    "computeFingerprint returns 64-char hex sha256",
+    "All 5 new STOP codes added to StopCode type",
+    "report.schema.json enum updated with new codes",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "Use Node.js crypto.createHash('sha256') for hashing",
-    "This is the foundation for loop detection"
+    "Type-only changes, no implementation logic yet",
+    "Implementation will come in subsequent tasks"
   ]
 }
