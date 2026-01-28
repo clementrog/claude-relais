@@ -107,3 +107,10 @@ export {
   writeReportMarkdown,
   type TickReportData,
 } from './report.js';
+
+export {
+  createHistorySnapshot,
+  writeHistoryArtifact,
+  snapshotRun,
+  getHistoryCount,
+} from './history.js';

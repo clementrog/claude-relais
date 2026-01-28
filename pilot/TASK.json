@@ -1,64 +1,64 @@
 {
   "v": 5,
-  "id": "WP-051",
+  "id": "WP-052",
   "milestone": "M6",
-  "goal": "Implement REPORT.md rendering from REPORT.json",
+  "goal": "Implement history snapshots for tick run artifacts",
 
   "context": {
-    "why": "REPORT.md is a deterministic, human-readable rendering of REPORT.json. The orchestrator reads this markdown to understand tick results. It must be generated from REPORT.json, never the other way around.",
-    "deps": ["WP-050"],
-    "extract": "From PRD: REPORT.md is a deterministic rendering of REPORT.json (human/orchestrator friendly). Runner must generate REPORT.md from REPORT.json."
+    "why": "Each tick's artifacts (report.json, report.md, diff.patch, verify.log) must be preserved in history/<run_id>/. This enables debugging and audit trails. Cap enforced only at preflight.",
+    "deps": ["WP-050", "WP-051"],
+    "extract": "From PRD Section 14: History snapshots are kept at history/<run_id>/{meta.json, report.json, report.md, diff.patch, verify.log}. History cap enforced at preflight only."
   },
 
   "subtasks": [
-    "1. Add renderReportMarkdown function to src/lib/report.ts",
-    "2. Generate markdown header with run_id, timestamps, verdict, code",
-    "3. Render task summary section (task_id, milestone, intent)",
-    "4. Render blast radius section with file/line counts",
-    "5. Render scope section with violations if any",
-    "6. Render verification results with pass/fail for each run",
-    "7. Render budgets summary",
-    "8. Add writeReportMarkdown(report, path) function",
-    "9. Export new functions from src/lib/index.ts"
+    "1. Create src/lib/history.ts module for history management",
+    "2. Implement createHistorySnapshot(runId, config): creates history/<run_id>/ directory",
+    "3. Implement writeHistoryArtifact(runId, filename, content): writes artifact to history",
+    "4. Implement snapshotRun(runId, report, markdown, diffPatch, verifyLog): saves all artifacts",
+    "5. Create meta.json with run_id, created_at, verdict, code",
+    "6. Implement getHistoryCount(config): counts existing history entries",
+    "7. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "markdown_sections": [
-      "# Relais Run Report",
-      "## Summary (run_id, timestamps, verdict, code)",
-      "## Task (task_id, milestone, kind, intent)",
-      "## Blast Radius (files_touched, lines_added, lines_deleted, new_files)",
-      "## Scope (ok/violations list)",
-      "## Verification (table: template_id, phase, exit_code, duration)",
-      "## Budgets (ticks, calls, cost)"
-    ],
-    "formatting": {
-      "verdict_success": "✓ SUCCESS",
-      "verdict_stop": "✗ STOP: <code>",
-      "verdict_blocked": "⚠ BLOCKED: <code>"
+    "history_structure": {
+      "path": "relais/history/<run_id>/",
+      "files": [
+        "meta.json - run_id, created_at, verdict, code",
+        "report.json - full report data",
+        "report.md - markdown rendering",
+        "diff.patch - git diff patch (optional)",
+        "verify.log - verification output (optional)"
+      ]
+    },
+    "meta_json": {
+      "run_id": "string",
+      "created_at": "string (ISO datetime)",
+      "verdict": "success | stop | blocked",
+      "code": "string"
     }
   },
 
   "scope": {
-    "write": ["src/lib/report.ts", "src/lib/index.ts"],
-    "create_under": [],
+    "write": ["src/lib/history.ts", "src/lib/index.ts"],
+    "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "renderReportMarkdown produces valid markdown from ReportData",
-    "All sections are included with proper formatting",
-    "Verification runs shown in table format",
-    "Scope violations listed if any",
-    "writeReportMarkdown writes file to disk",
+    "createHistorySnapshot creates directory structure",
+    "snapshotRun writes all artifacts to history/<run_id>/",
+    "meta.json contains correct metadata",
+    "Optional artifacts (diff.patch, verify.log) handled gracefully",
+    "getHistoryCount returns accurate count",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "Markdown should be deterministic (same input = same output)",
-    "Use simple markdown formatting (headers, tables, lists)"
+    "History cap checking is done in preflight (WP-013), not here",
+    "Use atomic writes where possible for crash safety"
   ]
 }

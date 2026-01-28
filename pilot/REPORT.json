@@ -1,28 +1,20 @@
 {
   "v": 3,
-  "task": "WP-051",
+  "task": "WP-052",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Added renderReportMarkdown function to src/lib/report.ts",
-    "2. Generated markdown header with run_id, timestamps, verdict, code",
-    "3. Rendered task summary section (task_id, milestone, kind, intent)",
-    "4. Rendered blast radius section with file/line counts",
-    "5. Rendered scope section with violations if any",
-    "6. Rendered verification results with pass/fail for each run",
-    "7. Rendered budgets summary",
-    "8. Added writeReportMarkdown(report, path) function",
-    "9. Exported new functions from src/lib/index.ts"
+    "1. Created src/lib/history.ts module for history management",
+    "2. Implemented createHistorySnapshot(runId, config): creates history/<run_id>/ directory",
+    "3. Implemented writeHistoryArtifact(runId, filename, content): writes artifact to history",
+    "4. Implemented snapshotRun(runId, report, markdown, diffPatch, verifyLog): saves all artifacts",
+    "5. Created meta.json with run_id, created_at, verdict, code",
+    "6. Implemented getHistoryCount(config): counts existing history entries",
+    "7. Exported from src/lib/index.ts"
   ],
-  "git_diff_files": [
-    "src/lib/report.ts",
-    "src/lib/index.ts"
-  ],
+  "git_diff_files": ["src/lib/history.ts", "src/lib/index.ts"],
   "files": {
-    "changed": [
-      "src/lib/report.ts",
-      "src/lib/index.ts"
-    ],
-    "created": [],
+    "changed": ["src/lib/index.ts"],
+    "created": ["src/lib/history.ts"],
     "deleted": []
   },
   "verify": [
@@ -32,6 +24,10 @@
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [],
+  "notes": [
+    "History snapshots use atomic writes for crash safety",
+    "Optional artifacts (diff.patch, verify.log) are only written if provided and enabled in config",
+    "getHistoryCount handles missing history directory gracefully by returning 0"
+  ],
   "blockers": []
 }
