@@ -149,3 +149,8 @@ export {
   checkCodexCli,
   type ReviewerDoctorResult,
 } from './doctor.js';
+
+export {
+  canonicalizeTask,
+  computeFingerprint,
+} from './fingerprint.js';
