@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-080",
+  "task": "WP-081",
   "milestone": "M9",
-  "branch": "task/wp-080-fingerprint",
+  "branch": "task/wp-081-guardrail-stop-codes",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T17:15:00Z"
+  "ts": "2026-01-28T17:20:00Z"
 }
