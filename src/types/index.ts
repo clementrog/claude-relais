@@ -23,6 +23,9 @@ export type {
   PerMilestoneBudgets,
   BudgetsConfig,
   HistoryConfig,
+  ReviewerAuthConfig,
+  ReviewerTriggerConfig,
+  ReviewerConfig,
 } from './config.js';
 
 export type { LockInfo } from './lock.js';

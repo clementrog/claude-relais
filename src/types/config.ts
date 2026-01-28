@@ -247,6 +247,69 @@ export interface HistoryConfig {
 }
 
 /**
+ * Authentication configuration for the reviewer agent.
+ */
+export interface ReviewerAuthConfig {
+  /** Authentication mode ('auto', 'api_key', or 'login') */
+  mode: 'auto' | 'api_key' | 'login';
+  /** Whether CI environments require an API key */
+  ci_requires_api_key: boolean;
+  /** Environment variable name for the API key */
+  api_key_env: string;
+}
+
+/**
+ * Trigger configuration for when the reviewer should be invoked.
+ */
+export interface ReviewerTriggerConfig {
+  /** Whether to trigger reviewer on verification failures */
+  on_verify_fail: boolean;
+  /** Whether to trigger reviewer on repeated stops */
+  on_repeated_stop: boolean;
+  /** Time window in ticks for tracking repeated stops */
+  stop_window_ticks: number;
+  /** Maximum number of stops allowed within the window */
+  max_stops_in_window: number;
+  /** Whether to trigger reviewer on high-risk file paths */
+  on_high_risk_paths: boolean;
+  /** Glob patterns for files considered high-risk */
+  high_risk_globs: string[];
+  /** Fraction of diff that must match high-risk patterns to trigger */
+  diff_fraction_threshold: number;
+}
+
+/**
+ * Reviewer agent configuration for Codex CLI integration.
+ *
+ * The reviewer acts as a 'Second Brain' that triggers on risky situations
+ * to provide additional review and validation.
+ */
+export interface ReviewerConfig {
+  /** Whether the reviewer feature is enabled */
+  enabled: boolean;
+  /** Engine to use for reviewer (e.g., 'claude_code') */
+  engine: string;
+  /** Command to invoke the reviewer engine */
+  command: string;
+  /** Model to use for reviewer */
+  model: string;
+  /** Maximum conversation turns */
+  max_turns: number;
+  /** Maximum budget in USD per reviewer call */
+  max_budget_usd: number;
+  /** Authentication settings */
+  auth: ReviewerAuthConfig;
+  /** Trigger conditions for reviewer invocation */
+  trigger: ReviewerTriggerConfig;
+  /** Path to JSON schema file */
+  schema_file: string;
+  /** Path to system prompt file */
+  system_prompt_file: string;
+  /** Path to user prompt file */
+  user_prompt_file: string;
+}
+
+/**
  * Main Relais configuration interface.
  *
  * This matches the structure of relais.config.json.
@@ -278,4 +341,6 @@ export interface RelaisConfig {
   budgets: BudgetsConfig;
   /** History settings */
   history: HistoryConfig;
+  /** Reviewer agent settings (optional, feature can be disabled) */
+  reviewer?: ReviewerConfig;
 }
