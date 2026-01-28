@@ -152,3 +152,29 @@ export function getUntrackedFiles(): string[] {
     return [];
   }
 }
+
+/**
+ * Gets the current git branch name.
+ *
+ * @returns The current branch name
+ * @throws {Error} If not in a git repo or branch cannot be determined
+ *
+ * @example
+ * ```typescript
+ * const branch = getCurrentBranch();
+ * console.log(`Current branch: ${branch}`);
+ * ```
+ */
+export function getCurrentBranch(): string {
+  try {
+    const branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return branch.trim();
+  } catch (error) {
+    throw new Error(
+      `Failed to get current branch: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
