@@ -1,75 +1,58 @@
 {
   "v": 5,
-  "id": "WP-030",
+  "id": "WP-031",
   "milestone": "M4",
-  "goal": "Implement builder invocation with bypassPermissions and allowedTools",
+  "goal": "Add schema validation for builder results using Ajv",
 
   "context": {
-    "why": "The builder (Hands) executes tasks proposed by the orchestrator. It runs with restricted tools and bypassPermissions mode.",
-    "deps": ["WP-020", "WP-021"],
-    "extract": "From PRD Section 9: Builder uses --permission-mode bypassPermissions, --allowedTools 'Read,Edit,Glob,Grep,Bash', --max-turns bounded. Must output JSON matching builder_result.schema.json."
+    "why": "Builder output should validate against builder_result.schema.json. When strict_builder_json=true, invalid output causes STOP_BUILDER_OUTPUT_INVALID.",
+    "deps": ["WP-022", "WP-030"],
+    "extract": "From PRD Section 9: Builder output must output ONLY a JSON object matching builder_result.schema.json. If builder output is malformed and config requires strict, runner STOP(builder_output_invalid)."
   },
 
   "subtasks": [
-    "1. Create src/types/builder.ts with BuilderResult interface matching builder_result.schema.json",
-    "2. Create src/runner/builder.ts with runBuilder function",
-    "3. Implement buildBuilderPrompt() to construct the user prompt from Task",
-    "4. Load builder prompt templates from relais/prompts/",
-    "5. Invoke Claude Code with bypassPermissions mode and allowedTools",
-    "6. Parse builder output (flexible - may not be valid JSON)",
-    "7. Wire into tick.ts BUILD phase",
-    "8. Export from index files"
+    "1. Update runBuilder to validate output against builder_result.schema.json",
+    "2. Use validateWithSchema from src/lib/schema.ts",
+    "3. Handle strict_builder_json config option",
+    "4. When strict and invalid: set builderOutputValid=false, return error",
+    "5. When lenient and invalid: continue but mark builderOutputValid=false",
+    "6. Update BuilderInvocationResult to include validation errors"
   ],
 
   "implementation": {
-    "BuilderResult": {
-      "note": "Match builder_result.schema.json",
-      "fields": {
-        "summary": "string - what was done",
-        "files_intended": "string[] - files the builder intended to modify",
-        "commands_ran": "string[] - commands executed",
-        "notes": "string[] - additional notes"
-      }
+    "validation_flow": [
+      "1. Try to parse response as JSON",
+      "2. If parse fails: builderOutputValid=false",
+      "3. If parse succeeds: validate against schema",
+      "4. If schema validation fails: builderOutputValid=false",
+      "5. If strict_builder_json=true AND invalid: return error immediately",
+      "6. If strict_builder_json=false AND invalid: continue with null result"
+    ],
+    "BuilderInvocationResult_update": {
+      "validationErrors": "string[] - schema validation errors if any"
     },
-    "runBuilder": {
-      "signature": "async function runBuilder(state: TickState, task: Task): Promise<BuilderInvocationResult>",
-      "behavior": [
-        "1. Load system prompt from config.builder.claude_code.system_prompt_file",
-        "2. Build user prompt with task details and scope reminders",
-        "3. Invoke Claude Code with bypassPermissions, allowedTools, max_turns",
-        "4. Parse response (try JSON, but don't fail if invalid - per config.builder.claude_code.strict_builder_json)",
-        "5. Return BuilderInvocationResult with success/failure"
-      ]
-    },
-    "BuilderInvocationResult": {
-      "success": "boolean",
-      "result": "BuilderResult | null",
-      "rawResponse": "string",
-      "durationMs": "number",
-      "builderOutputValid": "boolean - whether output was valid JSON"
-    },
-    "allowedTools": "Read,Edit,Glob,Grep,Bash"
+    "schema_path": "relais/schemas/builder_result.schema.json"
   },
 
   "scope": {
-    "write": ["src/runner/tick.ts"],
-    "create_under": ["src/types", "src/runner"],
+    "write": ["src/runner/builder.ts"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "src/types/builder.ts exists with BuilderResult interface",
-    "src/runner/builder.ts exists with runBuilder function",
-    "Builder is invoked with bypassPermissions and allowedTools",
-    "BUILD phase in tick.ts calls runBuilder",
+    "Builder output is validated against builder_result.schema.json",
+    "strict_builder_json=true causes failure on invalid output",
+    "strict_builder_json=false allows invalid output with warning",
+    "Validation errors are included in BuilderInvocationResult",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "MED",
+  "risk": "LOW",
   "notes": [
-    "Builder output parsing should be lenient (strict_builder_json=false by default)",
-    "bypassPermissions is dangerous - safety comes from scope enforcement in Judge phase"
+    "Reuse validateWithSchema from WP-022",
+    "Default strict_builder_json=false per config"
   ]
 }

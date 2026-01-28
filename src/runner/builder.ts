@@ -27,6 +27,8 @@ export interface BuilderInvocationResult {
   durationMs: number;
   /** Whether the builder output was valid JSON matching the schema */
   builderOutputValid: boolean;
+  /** Schema validation errors if any */
+  validationErrors: string[];
 }
 
 /**
@@ -106,6 +108,7 @@ export async function runBuilder(
       rawResponse: '',
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
+      validationErrors: [],
     };
   }
 
@@ -137,6 +140,7 @@ export async function runBuilder(
       rawResponse: '',
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
+      validationErrors: [],
     };
   }
 
@@ -161,6 +165,7 @@ export async function runBuilder(
         rawResponse: response.result || '',
         durationMs,
         builderOutputValid: false,
+        validationErrors: [],
       };
     }
 
@@ -170,6 +175,7 @@ export async function runBuilder(
       parsed = JSON.parse(response.result);
     } catch (error) {
       // JSON parse error - lenient mode allows this
+      const parseError = error instanceof Error ? error.message : String(error);
       if (strictBuilderJson) {
         return {
           success: false,
@@ -177,6 +183,7 @@ export async function runBuilder(
           rawResponse: response.result,
           durationMs,
           builderOutputValid: false,
+          validationErrors: [`JSON parse error: ${parseError}`],
         };
       } else {
         // Lenient mode: return success but mark output as invalid
@@ -186,6 +193,7 @@ export async function runBuilder(
           rawResponse: response.result,
           durationMs,
           builderOutputValid: false,
+          validationErrors: [`JSON parse error: ${parseError}`],
         };
       }
     }
@@ -202,6 +210,7 @@ export async function runBuilder(
             rawResponse: response.result,
             durationMs,
             builderOutputValid: false,
+            validationErrors: validationResult.errors,
           };
         } else {
           // Lenient mode: return success but mark output as invalid
@@ -211,6 +220,7 @@ export async function runBuilder(
             rawResponse: response.result,
             durationMs,
             builderOutputValid: false,
+            validationErrors: validationResult.errors,
           };
         }
       }
@@ -222,6 +232,7 @@ export async function runBuilder(
         rawResponse: response.result,
         durationMs,
         builderOutputValid: true,
+        validationErrors: [],
       };
     } else {
       // Schema not loaded - assume parsed JSON is valid if it has the right shape
@@ -240,9 +251,11 @@ export async function runBuilder(
           rawResponse: response.result,
           durationMs,
           builderOutputValid: true,
+          validationErrors: [],
         };
       } else {
         // Invalid shape
+        const shapeError = 'Parsed JSON does not match expected BuilderResult shape';
         if (strictBuilderJson) {
           return {
             success: false,
@@ -250,6 +263,7 @@ export async function runBuilder(
             rawResponse: response.result,
             durationMs,
             builderOutputValid: false,
+            validationErrors: [shapeError],
           };
         } else {
           return {
@@ -258,6 +272,7 @@ export async function runBuilder(
             rawResponse: response.result,
             durationMs,
             builderOutputValid: false,
+            validationErrors: [shapeError],
           };
         }
       }
@@ -270,6 +285,7 @@ export async function runBuilder(
       rawResponse: '',
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
+      validationErrors: [],
     };
   }
 }

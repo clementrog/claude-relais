@@ -1,36 +1,19 @@
 {
   "v": 3,
-  "task": "WP-030",
+  "task": "WP-031",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Created src/types/builder.ts with BuilderResult interface matching builder_result.schema.json",
-    "2. Created src/runner/builder.ts with runBuilder function",
-    "3. Implemented buildBuilderPrompt() to construct the user prompt from Task",
-    "4. Load builder prompt templates from relais/prompts/",
-    "5. Invoke Claude Code with bypassPermissions mode and allowedTools",
-    "6. Parse builder output (flexible - may not be valid JSON)",
-    "7. Wired into tick.ts BUILD phase",
-    "8. Exported from index files"
+    "Updated runBuilder to validate output against builder_result.schema.json",
+    "Using validateWithSchema from src/lib/schema.ts for schema validation",
+    "Handling strict_builder_json config option in validation flow",
+    "When strict and invalid: setting builderOutputValid=false and returning error",
+    "When lenient and invalid: continuing but marking builderOutputValid=false",
+    "BuilderInvocationResult includes validationErrors field"
   ],
-  "git_diff_files": [
-    "src/runner/builder.ts",
-    "src/runner/index.ts",
-    "src/runner/tick.ts",
-    "src/types/builder.ts",
-    "src/types/index.ts",
-    "src/types/state.ts"
-  ],
+  "git_diff_files": ["src/runner/builder.ts"],
   "files": {
-    "changed": [
-      "src/runner/index.ts",
-      "src/runner/tick.ts",
-      "src/types/index.ts",
-      "src/types/state.ts"
-    ],
-    "created": [
-      "src/runner/builder.ts",
-      "src/types/builder.ts"
-    ],
+    "changed": ["src/runner/builder.ts"],
+    "created": [],
     "deleted": []
   },
   "verify": [
@@ -41,10 +24,12 @@
     }
   ],
   "notes": [
-    "Builder implementation uses bypassPermissions mode with restricted allowedTools (Read,Edit,Glob,Grep,Bash)",
-    "Builder output parsing is lenient by default (strict_builder_json=false), allowing invalid JSON without failure",
-    "Builder prompts are loaded from relais/prompts/ directory as configured",
-    "Builder is properly wired into tick.ts BUILD phase and exports are in place"
+    "Schema validation is implemented using validateWithSchema from src/lib/schema.ts",
+    "Builder output is validated against builder_result.schema.json loaded from config",
+    "strict_builder_json=true causes failure on invalid output with validationErrors populated",
+    "strict_builder_json=false allows invalid output to continue with builderOutputValid=false",
+    "All validation errors (JSON parse errors and schema validation errors) are captured in validationErrors array",
+    "BuilderInvocationResult interface includes validationErrors: string[] field"
   ],
   "blockers": []
 }
