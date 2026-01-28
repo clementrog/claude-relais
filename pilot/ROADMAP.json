@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M2",
+  "current": "M3",
   "milestones": [
     {
       "id": "M1",
@@ -25,7 +25,7 @@
     {
       "id": "M2",
       "title": "Core Runner Skeleton",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
         "WP-010: CLI entry point with commander.js",
