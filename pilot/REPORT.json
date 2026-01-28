@@ -1,14 +1,14 @@
 {
   "v": 3,
-  "task": "WP-031",
+  "task": "WP-032",
   "status": "DONE",
   "subtasks_completed": [
-    "Updated runBuilder to validate output against builder_result.schema.json",
-    "Using validateWithSchema from src/lib/schema.ts for schema validation",
-    "Handling strict_builder_json config option in validation flow",
-    "When strict and invalid: setting builderOutputValid=false and returning error",
-    "When lenient and invalid: continuing but marking builderOutputValid=false",
-    "BuilderInvocationResult includes validationErrors field"
+    "1. Added turn limit validation in runBuilder before invocation",
+    "2. Validated task.builder.max_turns >= 1 (via Math.max(1, ...))",
+    "3. Capped task.builder.max_turns to config.builder.claude_code.max_turns if exceeded",
+    "4. Added turnsUsed field to BuilderInvocationResult (extracted from raw response num_turns if available)",
+    "5. Added turnsRequested field to BuilderInvocationResult for tracking",
+    "6. Added warning log when task turns are capped"
   ],
   "git_diff_files": ["src/runner/builder.ts"],
   "files": {
@@ -24,12 +24,11 @@
     }
   ],
   "notes": [
-    "Schema validation is implemented using validateWithSchema from src/lib/schema.ts",
-    "Builder output is validated against builder_result.schema.json loaded from config",
-    "strict_builder_json=true causes failure on invalid output with validationErrors populated",
-    "strict_builder_json=false allows invalid output to continue with builderOutputValid=false",
-    "All validation errors (JSON parse errors and schema validation errors) are captured in validationErrors array",
-    "BuilderInvocationResult interface includes validationErrors: string[] field"
+    "Turn limit validation now clamps requested turns to range [1, config.builder.claude_code.max_turns]",
+    "Warning is logged when clamping occurs, showing original value, clamped value, and limit",
+    "turnsRequested tracks the original requested value (before clamping)",
+    "turnsUsed extracts num_turns from Claude CLI raw response if available, otherwise null",
+    "All BuilderInvocationResult return paths now include turnsRequested and turnsUsed fields"
   ],
   "blockers": []
 }

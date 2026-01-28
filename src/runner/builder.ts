@@ -29,6 +29,10 @@ export interface BuilderInvocationResult {
   builderOutputValid: boolean;
   /** Schema validation errors if any */
   validationErrors: string[];
+  /** The turns requested by task (before clamping) */
+  turnsRequested: number;
+  /** Actual turns used (from raw response, if available) */
+  turnsUsed: number | null;
 }
 
 /**
@@ -96,6 +100,17 @@ export async function runBuilder(
   const workspaceDir = config.workspace_dir;
   const startTime = Date.now();
 
+  // Validate and clamp max_turns
+  const requestedTurns = task.builder.max_turns;
+  const maxTurnsLimit = config.builder.claude_code.max_turns;
+  const clampedTurns = Math.max(1, Math.min(requestedTurns, maxTurnsLimit));
+  
+  if (requestedTurns !== clampedTurns) {
+    console.warn(
+      `Task ${task.task_id}: max_turns ${requestedTurns} clamped to ${clampedTurns} (limit: ${maxTurnsLimit})`
+    );
+  }
+
   // Load system prompt
   const systemPromptPath = join(workspaceDir, config.builder.claude_code.system_prompt_file);
   let systemPrompt: string;
@@ -109,6 +124,8 @@ export async function runBuilder(
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
       validationErrors: [],
+      turnsRequested: requestedTurns,
+      turnsUsed: null,
     };
   }
 
@@ -141,19 +158,30 @@ export async function runBuilder(
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
       validationErrors: [],
+      turnsRequested: requestedTurns,
+      turnsUsed: null,
     };
   }
 
   try {
     const response = await invokeClaudeCode(config.claude_code_cli, {
       prompt: userPrompt,
-      maxTurns: task.builder.max_turns,
+      maxTurns: clampedTurns,
       permissionMode: config.builder.claude_code.permission_mode as 'bypassPermissions',
       model,
       allowedTools,
       systemPrompt,
       timeout,
     });
+
+    // Extract num_turns from raw response if available
+    let turnsUsed: number | null = null;
+    if (response.raw && typeof response.raw === 'object' && 'num_turns' in response.raw) {
+      const numTurns = (response.raw as Record<string, unknown>).num_turns;
+      if (typeof numTurns === 'number') {
+        turnsUsed = numTurns;
+      }
+    }
 
     const durationMs = Date.now() - startTime;
 
@@ -166,6 +194,8 @@ export async function runBuilder(
         durationMs,
         builderOutputValid: false,
         validationErrors: [],
+        turnsRequested: requestedTurns,
+        turnsUsed,
       };
     }
 
@@ -184,6 +214,8 @@ export async function runBuilder(
           durationMs,
           builderOutputValid: false,
           validationErrors: [`JSON parse error: ${parseError}`],
+          turnsRequested: requestedTurns,
+          turnsUsed,
         };
       } else {
         // Lenient mode: return success but mark output as invalid
@@ -194,13 +226,15 @@ export async function runBuilder(
           durationMs,
           builderOutputValid: false,
           validationErrors: [`JSON parse error: ${parseError}`],
+          turnsRequested: requestedTurns,
+          turnsUsed,
         };
       }
     }
 
     // Validate against schema if schema was loaded
     if (builderResultSchemaCache) {
-      const validationResult = validateWithSchema<BuilderResult>(parsed, builderResultSchemaCache);
+        const validationResult = validateWithSchema<BuilderResult>(parsed, builderResultSchemaCache);
       if (!validationResult.valid) {
         // Schema validation error
         if (strictBuilderJson) {
@@ -211,6 +245,8 @@ export async function runBuilder(
             durationMs,
             builderOutputValid: false,
             validationErrors: validationResult.errors,
+            turnsRequested: requestedTurns,
+            turnsUsed,
           };
         } else {
           // Lenient mode: return success but mark output as invalid
@@ -221,6 +257,8 @@ export async function runBuilder(
             durationMs,
             builderOutputValid: false,
             validationErrors: validationResult.errors,
+            turnsRequested: requestedTurns,
+            turnsUsed,
           };
         }
       }
@@ -233,6 +271,8 @@ export async function runBuilder(
         durationMs,
         builderOutputValid: true,
         validationErrors: [],
+        turnsRequested: requestedTurns,
+        turnsUsed,
       };
     } else {
       // Schema not loaded - assume parsed JSON is valid if it has the right shape
@@ -252,6 +292,8 @@ export async function runBuilder(
           durationMs,
           builderOutputValid: true,
           validationErrors: [],
+          turnsRequested: requestedTurns,
+          turnsUsed,
         };
       } else {
         // Invalid shape
@@ -264,6 +306,8 @@ export async function runBuilder(
             durationMs,
             builderOutputValid: false,
             validationErrors: [shapeError],
+            turnsRequested: requestedTurns,
+            turnsUsed,
           };
         } else {
           return {
@@ -273,6 +317,8 @@ export async function runBuilder(
             durationMs,
             builderOutputValid: false,
             validationErrors: [shapeError],
+            turnsRequested: requestedTurns,
+            turnsUsed,
           };
         }
       }
@@ -286,6 +332,8 @@ export async function runBuilder(
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
       validationErrors: [],
+      turnsRequested: requestedTurns,
+      turnsUsed: null,
     };
   }
 }

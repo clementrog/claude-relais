@@ -1,13 +1,13 @@
 {
   "v": 3,
-  "phase": "DISPATCH",
+  "phase": "BUILD",
   "mode": "single",
-  "task": "WP-031",
+  "task": "WP-032",
   "milestone": "M4",
-  "branch": "task/wp-031-builder-result",
+  "branch": "task/wp-032-turn-limits",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
-  "next": "BUILD",
-  "ts": "2026-01-28T12:10:00Z"
+  "next": "JUDGE",
+  "ts": "2026-01-28T12:20:00Z"
 }
