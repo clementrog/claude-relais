@@ -1,23 +1,20 @@
 {
   "v": 3,
-  "task": "WP-044",
+  "task": "WP-045",
   "status": "DONE",
   "subtasks_completed": [
-    "Added ParamValidationError and ParamValidationResult interfaces to src/lib/verify.ts",
-    "Implemented validateParam function with length, whitespace, dotdot, and metachar validation checks",
-    "Implemented validateVerificationParams function to validate all params for a task",
-    "Exported validateParam, validateVerificationParams, ParamValidationError, and ParamValidationResult from src/lib/index.ts"
+    "Created src/lib/rollback.ts module with rollback functions",
+    "Created RollbackResult interface with success, tracked_reset, paths_removed, errors fields",
+    "Implemented rollbackTracked(baseCommit): git reset --hard <base_commit>",
+    "Implemented removeUntrackedPaths(paths): removes specific untracked files/directories",
+    "Implemented rollback(baseCommit, untrackedPaths): full rollback operation combining both",
+    "Added error handling for file already removed (ENOENT), permission issues, etc.",
+    "Exported rollback functions from src/lib/index.ts"
   ],
-  "git_diff_files": [
-    "src/lib/index.ts",
-    "src/lib/verify.ts"
-  ],
+  "git_diff_files": ["src/lib/index.ts", "src/lib/rollback.ts"],
   "files": {
-    "changed": [
-      "src/lib/verify.ts",
-      "src/lib/index.ts"
-    ],
-    "created": [],
+    "changed": ["src/lib/index.ts"],
+    "created": ["src/lib/rollback.ts"],
     "deleted": []
   },
   "verify": [
@@ -28,10 +25,11 @@
     }
   ],
   "notes": [
-    "Implemented comprehensive parameter validation with all required checks: length, whitespace, path traversal, and shell metacharacters",
-    "Validation functions are exported and ready for use in verification command execution",
-    "ParamValidationError includes param_name, value, and reason for easy debugging",
-    "All validation checks match the implementation requirements from TASK.json"
+    "rollbackTracked uses execSync for synchronous git reset --hard",
+    "removeUntrackedPaths uses fs.unlink for files and fs.rm with recursive for directories",
+    "Errors are captured in the result object, not thrown",
+    "ENOENT errors (file not found) are handled gracefully and not reported as errors",
+    "RollbackResult.success is true only if tracked_reset succeeded and no errors occurred"
   ],
   "blockers": []
 }

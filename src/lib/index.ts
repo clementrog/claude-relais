@@ -91,3 +91,10 @@ export {
   type ParamValidationError,
   type ParamValidationResult,
 } from './verify.js';
+
+export {
+  rollbackTracked,
+  removeUntrackedPaths,
+  rollback,
+  type RollbackResult,
+} from './rollback.js';

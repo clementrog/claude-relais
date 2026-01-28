@@ -1,65 +1,60 @@
 {
   "v": 5,
-  "id": "WP-044",
+  "id": "WP-045",
   "milestone": "M5",
-  "goal": "Implement parameter validation with metachar rejection for verification commands",
+  "goal": "Implement rollback to restore repo to base_commit state after STOP",
 
   "context": {
-    "why": "Before executing verification commands, parameters must be validated to prevent injection attacks. Reject params with shell metacharacters, '..' path traversal, whitespace, or excessive length.",
-    "deps": ["WP-043"],
-    "extract": "From PRD: Runner expands params with strict validation: max length, no whitespace, no '..' path segments, reject shell metacharacters via regex. If param fails validation → STOP(STOP_VERIFY_TAINTED)."
+    "why": "When Judge detects a violation (scope, diff limits, etc.), the repo must be rolled back to the base_commit state. This resets tracked files and removes only the untracked files that were touched by the builder.",
+    "deps": ["WP-040"],
+    "extract": "From PRD Appendix B: Rollback steps: 1) git reset --hard <base_commit>, 2) Remove untracked touched paths captured by the runner (only those paths). Rollback is mandatory on any STOP after builder ran."
   },
 
   "subtasks": [
-    "1. Add validateParam function to src/lib/verify.ts",
-    "2. Create ParamValidationResult interface with ok, error details",
-    "3. Check param length against config.verification.max_param_len",
-    "4. Check for whitespace if config.verification.reject_whitespace_in_params",
-    "5. Check for '..' if config.verification.reject_dotdot",
-    "6. Check against config.verification.reject_metachars_regex",
-    "7. Create validateVerificationParams to validate all params for a task",
-    "8. Export new functions from src/lib/index.ts"
+    "1. Create src/lib/rollback.ts module for rollback functions",
+    "2. Create RollbackResult interface with success, errors, paths_removed",
+    "3. Implement rollbackTracked(baseCommit): git reset --hard <base_commit>",
+    "4. Implement removeUntrackedPaths(paths): remove specific untracked files",
+    "5. Implement rollback(baseCommit, untrackedPaths): full rollback operation",
+    "6. Handle errors gracefully (file already removed, permission issues)",
+    "7. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "ParamValidationResult_interface": {
-      "ok": "boolean - true if all params valid",
-      "errors": "ParamValidationError[] - list of validation failures"
+    "RollbackResult_interface": {
+      "success": "boolean - true if rollback completed",
+      "tracked_reset": "boolean - whether git reset succeeded",
+      "paths_removed": "string[] - untracked paths that were removed",
+      "errors": "string[] - any errors encountered"
     },
-    "ParamValidationError_interface": {
-      "param_name": "string - name of the parameter",
-      "value": "string - the invalid value",
-      "reason": "string - why it failed (too_long, whitespace, dotdot, metachar)"
+    "git_commands": {
+      "reset_tracked": "git reset --hard <base_commit>",
+      "verify_clean": "git status --porcelain (should be empty after rollback)"
     },
-    "validation_checks": [
-      "1. Length check: value.length > max_param_len",
-      "2. Whitespace check: /\\s/ if reject_whitespace_in_params",
-      "3. Path traversal check: /\\.\\.\\/|^\\.\\.$|\\/\\.\\.$/  if reject_dotdot",
-      "4. Metachar check: new RegExp(reject_metachars_regex)"
-    ]
+    "untracked_removal": "Use fs.unlink for files, fs.rm with recursive for directories"
   },
 
   "scope": {
-    "write": ["src/lib/verify.ts", "src/lib/index.ts"],
-    "create_under": [],
+    "write": ["src/lib/rollback.ts", "src/lib/index.ts"],
+    "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "validateParam detects params exceeding max_param_len",
-    "validateParam detects whitespace in params",
-    "validateParam detects '..' path traversal",
-    "validateParam detects shell metacharacters",
-    "validateVerificationParams validates all task params",
-    "Returns ok=true when all params are valid",
+    "rollbackTracked resets tracked files to base_commit",
+    "removeUntrackedPaths removes only specified paths",
+    "rollback combines both operations correctly",
+    "Errors are captured, not thrown",
+    "RollbackResult reports what was done",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "MED",
   "notes": [
-    "Default metachar regex from config: [;&|$\\\\><(){}\\[\\]`\\n\\r\\t\\0]",
-    "This is a security-critical function - be thorough"
+    "Only remove paths that were touched (captured from diff analysis)",
+    "Don't blindly delete all untracked files - only builder-touched ones",
+    "Use execSync for git commands (synchronous is fine for rollback)"
   ]
 }

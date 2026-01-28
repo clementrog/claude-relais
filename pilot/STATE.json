@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-044",
+  "task": "WP-045",
   "milestone": "M5",
-  "branch": "task/wp-044-param-validation",
+  "branch": "task/wp-045-rollback",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T13:10:00Z"
+  "ts": "2026-01-28T13:20:00Z"
 }
