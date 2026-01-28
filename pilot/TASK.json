@@ -1,55 +1,57 @@
 {
   "v": 5,
-  "id": "WP-075",
+  "id": "WP-076",
   "milestone": "M8",
-  "goal": "Add guardrail fields to STATE.json types",
+  "goal": "Add doctor checks for Codex CLI reviewer",
 
   "context": {
-    "why": "STATE.json needs to track guardrail state: force_patch_until_success flag, last_risk_flags, and stop_history for repeated STOP detection.",
-    "deps": ["WP-074"],
-    "extract": "From PRD Appendix C8: Add guardrail object to STATE with force_patch_until_success (bool), last_risk_flags (string[]), stop_history (array of {run_id, code, at})."
+    "why": "The 'relais doctor' command should verify Codex CLI availability and auth status so users know if reviewer feature will work.",
+    "deps": ["WP-075"],
+    "extract": "From PRD Appendix C3: Doctor checks codex --version, auth status (api_key_present or chatgpt_login_ok), prints reviewer mode (enabled/disabled, auth mode)."
   },
 
   "subtasks": [
-    "1. Add GuardrailState interface to src/types/state.ts",
-    "2. Add StopHistoryEntry interface (run_id, code, at timestamp)",
-    "3. Add optional guardrail field to StateData interface",
-    "4. Export new types from src/types/index.ts",
-    "5. Add helper functions to src/lib/state.ts for updating guardrail state"
+    "1. Add checkCodexCli() function to src/lib/doctor.ts",
+    "2. Check 'codex --version' succeeds (CLI available)",
+    "3. Check CODEX_API_KEY env var presence for auth status",
+    "4. Add ReviewerDoctorResult type with cli_available, auth_status fields",
+    "5. Integrate into existing doctor checks",
+    "6. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "types": {
-      "StopHistoryEntry": "{ run_id: string, code: string, at: string }",
-      "GuardrailState": "{ force_patch_until_success: boolean, last_risk_flags: string[], stop_history: StopHistoryEntry[] }"
+    "checks": {
+      "cli_available": "spawn codex --version, check exit code 0",
+      "auth_status": "api_key_present if CODEX_API_KEY set, else unknown (best-effort)",
+      "reviewer_mode": "Read from config: enabled, auth.mode"
     },
-    "helpers": {
-      "appendStopHistory": "Add entry, cap to 50 entries",
-      "clearForcePatch": "Set force_patch_until_success=false on success",
-      "setForcePatch": "Set force_patch_until_success=true"
+    "output": {
+      "success": "✓ codex cli: available (vX.X.X)",
+      "auth_ok": "✓ codex auth: api_key_present",
+      "auth_missing": "✗ codex auth: missing (run 'codex login' or set CODEX_API_KEY)",
+      "disabled": "○ reviewer: disabled"
     }
   },
 
   "scope": {
-    "write": ["src/types/state.ts", "src/lib/state.ts", "src/types/index.ts", "src/lib/index.ts"],
+    "write": ["src/lib/doctor.ts", "src/lib/index.ts"],
     "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "GuardrailState and StopHistoryEntry interfaces defined",
-    "StateData has optional guardrail?: GuardrailState field",
-    "appendStopHistory caps at 50 entries",
-    "clearForcePatch and setForcePatch helpers work",
-    "Types exported correctly",
+    "checkCodexCli returns ReviewerDoctorResult",
+    "CLI check spawns 'codex --version' with shell:false",
+    "Auth check reads CODEX_API_KEY from process.env",
+    "Results include cli_available, auth_status, version fields",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "guardrail is optional - absent means no escalation state",
-    "stop_history capped to prevent unbounded growth"
+    "Auth check is best-effort - only env var presence",
+    "If codex CLI not found, reviewer features degrade gracefully"
   ]
 }

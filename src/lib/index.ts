@@ -144,3 +144,8 @@ export {
   type ReviewerFlowContext,
   type ReviewerFlowResult,
 } from './reviewer-flow.js';
+
+export {
+  checkCodexCli,
+  type ReviewerDoctorResult,
+} from './doctor.js';
