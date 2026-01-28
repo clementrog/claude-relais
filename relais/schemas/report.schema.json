@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relais.local/schemas/report.schema.json",
+  "title": "Relais Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "started_at",
+    "ended_at",
+    "duration_ms",
+    "base_commit",
+    "head_commit",
+    "task",
+    "verdict",
+    "code",
+    "blast_radius",
+    "scope",
+    "diff",
+    "verification",
+    "budgets"
+  ],
+  "properties": {
+    "run_id": { "type": "string", "minLength": 8, "maxLength": 80 },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "base_commit": { "type": "string", "minLength": 7, "maxLength": 64 },
+    "head_commit": { "type": "string", "minLength": 7, "maxLength": 64 },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "milestone_id", "task_kind", "intent"],
+      "properties": {
+        "task_id": { "type": "string" },
+        "milestone_id": { "type": "string" },
+        "task_kind": { "type": "string", "enum": ["execute", "verify_only", "question"] },
+        "intent": { "type": "string" }
+      }
+    },
+    "verdict": { "type": "string", "enum": ["success", "stop", "blocked"] },
+    "code": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "STOP_SCOPE_VIOLATION_FORBIDDEN",
+        "STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED",
+        "STOP_SCOPE_VIOLATION_NEW_FILE",
+        "STOP_LOCKFILE_CHANGE_FORBIDDEN",
+        "STOP_DIFF_TOO_LARGE",
+        "STOP_VERIFY_FAILED_FAST",
+        "STOP_VERIFY_FAILED_SLOW",
+        "STOP_VERIFY_TAINTED",
+        "STOP_VERIFY_ONLY_SIDE_EFFECTS",
+        "STOP_QUESTION_SIDE_EFFECTS",
+        "STOP_RUNNER_OWNED_MUTATION",
+        "STOP_BUILDER_OUTPUT_INVALID",
+        "STOP_HEAD_MOVED",
+        "STOP_INTERRUPTED",
+        "BLOCKED_BUDGET_EXHAUSTED",
+        "BLOCKED_DIRTY_WORKTREE",
+        "BLOCKED_LOCK_HELD",
+        "BLOCKED_CRASH_RECOVERY_REQUIRED",
+        "BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
+        "BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED",
+        "BLOCKED_MISSING_CONFIG"
+      ]
+    },
+    "blast_radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_touched", "lines_added", "lines_deleted", "new_files"],
+      "properties": {
+        "files_touched": { "type": "integer", "minimum": 0 },
+        "lines_added": { "type": "integer", "minimum": 0 },
+        "lines_deleted": { "type": "integer", "minimum": 0 },
+        "new_files": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "violations", "touched_paths"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "violations": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "minItems": 0,
+          "maxItems": 200
+        },
+        "touched_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "minItems": 0,
+          "maxItems": 500
+        }
+      }
+    },
+    "diff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files_changed", "lines_changed", "diff_patch_path"],
+      "properties": {
+        "files_changed": { "type": "integer", "minimum": 0 },
+        "lines_changed": { "type": "integer", "minimum": 0 },
+        "diff_patch_path": { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exec_mode", "runs", "verify_log_path"],
+      "properties": {
+        "exec_mode": { "type": "string", "enum": ["argv_no_shell"] },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["template_id", "phase", "cmd", "args", "exit_code", "duration_ms", "timed_out"],
+            "properties": {
+              "template_id": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "phase": { "type": "string", "enum": ["fast", "slow"] },
+              "cmd": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "args": {
+                "type": "array",
+                "items": { "type": "string", "maxLength": 200 },
+                "minItems": 0,
+                "maxItems": 40
+              },
+              "exit_code": { "type": "integer", "minimum": -1, "maximum": 255 },
+              "duration_ms": { "type": "integer", "minimum": 0 },
+              "timed_out": { "type": "boolean" }
+            }
+          },
+          "minItems": 0,
+          "maxItems": 40
+        },
+        "verify_log_path": { "type": "string", "minLength": 1, "maxLength": 300 }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["milestone_id", "ticks", "orchestrator_calls", "builder_calls", "verify_runs", "estimated_cost_usd", "warnings"],
+      "properties": {
+        "milestone_id": { "type": "string" },
+        "ticks": { "type": "integer", "minimum": 0 },
+        "orchestrator_calls": { "type": "integer", "minimum": 0 },
+        "builder_calls": { "type": "integer", "minimum": 0 },
+        "verify_runs": { "type": "integer", "minimum": 0 },
+        "estimated_cost_usd": { "type": "number", "minimum": 0 },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "minItems": 0,
+          "maxItems": 20
+        }
+      }
+    },
+    "pointers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "report_md_path": { "type": "string" },
+        "history_dir": { "type": "string" }
+      }
+    }
+  }
+}

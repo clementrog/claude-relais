@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relais.local/schemas/builder_result.schema.json",
+  "title": "Relais Builder Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "files_intended", "commands_ran", "notes"],
+  "properties": {
+    "summary": { "type": "string", "minLength": 1, "maxLength": 800 },
+    "files_intended": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+      "minItems": 0,
+      "maxItems": 200
+    },
+    "commands_ran": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+      "minItems": 0,
+      "maxItems": 50
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+      "minItems": 0,
+      "maxItems": 20
+    }
+  }
+}

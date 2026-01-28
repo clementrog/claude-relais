@@ -1,0 +1,17 @@
+{
+  "run_id": null,
+  "started_at": null,
+  "ended_at": null,
+  "duration_ms": null,
+  "base_commit": null,
+  "head_commit": null,
+  "task": null,
+  "verdict": null,
+  "code": null,
+  "blast_radius": null,
+  "scope": null,
+  "diff": null,
+  "verification": null,
+  "budgets": null,
+  "pointers": null
+}

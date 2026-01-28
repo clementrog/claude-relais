@@ -1,0 +1,13 @@
+{
+  "milestone_id": null,
+  "budgets": {
+    "ticks": 0,
+    "orchestrator_calls": 0,
+    "builder_calls": 0,
+    "verify_runs": 0,
+    "estimated_cost_usd": 0
+  },
+  "budget_warning": false,
+  "last_run_id": null,
+  "last_verdict": null
+}

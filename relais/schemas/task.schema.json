@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relais.local/schemas/task.schema.json",
+  "title": "Relais Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task_id", "milestone_id", "task_kind", "intent", "scope", "diff_limits", "verification", "builder"],
+  "properties": {
+    "task_id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "milestone_id": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "task_kind": { "type": "string", "enum": ["execute", "verify_only", "question"] },
+    "intent": { "type": "string", "minLength": 1, "maxLength": 1200 },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "choices": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "minItems": 0,
+          "maxItems": 12
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_globs", "forbidden_globs", "allow_new_files", "allow_lockfile_changes"],
+      "properties": {
+        "allowed_globs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "forbidden_globs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "allow_new_files": { "type": "boolean" },
+        "allow_lockfile_changes": { "type": "boolean" }
+      }
+    },
+    "diff_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files_touched", "max_lines_changed"],
+      "properties": {
+        "max_files_touched": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "max_lines_changed": { "type": "integer", "minimum": 1, "maximum": 20000 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fast", "slow"],
+      "properties": {
+        "fast": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "minItems": 0,
+          "maxItems": 16
+        },
+        "slow": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "minItems": 0,
+          "maxItems": 16
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": ["string", "number", "boolean", "null"]
+            }
+          }
+        }
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "max_turns", "instructions"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["claude_code", "patch"] },
+        "max_turns": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "instructions": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "patch": { "type": "string", "minLength": 1, "maxLength": 500000 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "patch" } } },
+          "then": { "required": ["patch"] }
+        },
+        {
+          "if": { "properties": { "task_kind": { "const": "question" } } },
+          "then": { "properties": { "mode": { "const": "claude_code" } } }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "task_kind": { "const": "question" } } },
+      "then": { "required": ["question"] }
+    }
+  ]
+}

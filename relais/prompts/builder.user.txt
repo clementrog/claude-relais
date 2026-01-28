@@ -1,0 +1,27 @@
+Execute this TASK.
+
+Return ONLY builder_result JSON matching builder_result.schema.json. Nothing else.
+
+TASK (canonical):
+
+{{TASK_JSON}}
+
+Scope reminders:
+
+- allowed_globs: {{ALLOWED_GLOBS}}
+
+- forbidden_globs: {{FORBIDDEN_GLOBS}}
+
+- allow_new_files: {{ALLOW_NEW_FILES}}
+
+- allow_lockfile_changes: {{ALLOW_LOCKFILE_CHANGES}}
+
+- diff limits: files<= {{MAX_FILES_TOUCHED}}, lines<= {{MAX_LINES_CHANGED}}
+
+Notes:
+
+- The runner will run verifications separately (do not invent verification results).
+
+- If task_kind is verify_only or question: DO NOT modify any files.
+
+Now execute.
