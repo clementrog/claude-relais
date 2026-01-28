@@ -34,6 +34,7 @@ export {
   getHeadCommit,
   getDiffFiles,
   getUntrackedFiles,
+  getCurrentBranch,
 } from './git.js';
 
 export { runPreflight } from './preflight.js';
@@ -158,3 +159,12 @@ export {
   canonicalizeTask,
   computeFingerprint,
 } from './fingerprint.js';
+
+export {
+  checkBranchMatch,
+  checkFingerprintMatch,
+  checkWorktreeClean,
+  runGuardrailPreflight,
+  type GuardrailState,
+  type PreflightResult as GuardrailPreflightResult,
+} from './guardrails.js';
