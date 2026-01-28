@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M8",
+  "current": "M9",
   "milestones": [
     {
       "id": "M1",
@@ -98,7 +98,7 @@
     {
       "id": "M8",
       "title": "Review Escalation",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
         "WP-070: Reviewer config types (reviewer section in relais.config.json)",
@@ -109,6 +109,34 @@
         "WP-075: STATE.json guardrail fields (force_patch_until_success, stop_history)",
         "WP-076: Doctor checks for reviewer (codex --version, auth status)",
         "WP-077: Reviewer fixtures R101-R104"
+      ]
+    },
+    {
+      "id": "M9",
+      "title": "Guardrails",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-080: Task fingerprint (canonicalizeTask + sha256)",
+        "WP-081: New STOP codes (STOP_REDISPATCH_IDENTICAL_TASK, STOP_VERIFY_FLAKY_OR_TIMEOUT, STOP_MERGE_DIRTY_WORKTREE)",
+        "WP-082: STATE.json additions (task_fingerprint, last_failed_fingerprint, failure_streak, verify_history, escalation)",
+        "WP-083: Preflight checks (branch match, fingerprint match, worktree clean)",
+        "WP-084: Verify result classification (PASS/FAIL/TIMEOUT mapping)",
+        "WP-085: Escalation logic (shouldEscalate, 2-failure gate, stop-window)",
+        "WP-086: Merge eligibility checks (verify-gated, auto-stash pilot files)",
+        "WP-087: Update orchestrator prompt with fingerprint rule"
+      ]
+    },
+    {
+      "id": "M10",
+      "title": "Guardrails Tests",
+      "status": "pending",
+      "risk": "LOW",
+      "tasks": [
+        "WP-090: Unit tests U001-U005 (canonicalizeTask, classifyVerifyResult, shouldEscalate, preflightChecks, mergeEligibility)",
+        "WP-091: Fixtures F013-F016 (fingerprint stability, identical redispatch, escalation gate, timeout classification)",
+        "WP-092: Fixtures F017-F020 (branch mismatch, dirty worktree, evidence gating, stop-window escalation)",
+        "WP-093: Schema contract tests S001-S002 (roundtrip validation, version bump discipline)"
       ]
     }
   ]
