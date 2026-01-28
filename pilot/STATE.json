@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-082",
+  "task": "WP-083",
   "milestone": "M9",
-  "branch": "task/wp-082-state-guardrail-fields",
+  "branch": "task/wp-083-guardrail-preflight",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T17:25:00Z"
+  "ts": "2026-01-28T17:30:00Z"
 }
