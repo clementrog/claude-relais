@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-050",
+  "task": "WP-051",
   "milestone": "M6",
-  "branch": "task/wp-050-report-json",
+  "branch": "task/wp-051-report-md",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T13:30:00Z"
+  "ts": "2026-01-28T13:40:00Z"
 }

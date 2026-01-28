@@ -1,64 +1,64 @@
 {
   "v": 5,
-  "id": "WP-050",
+  "id": "WP-051",
   "milestone": "M6",
-  "goal": "Implement REPORT.json generation with full tick data",
+  "goal": "Implement REPORT.md rendering from REPORT.json",
 
   "context": {
-    "why": "Every tick must end with REPORT.json containing complete tick data: run_id, timestamps, task info, verdict, code, blast_radius, scope check, diff, verification results, and budgets.",
-    "deps": ["WP-040", "WP-041", "WP-042", "WP-043"],
-    "extract": "From PRD: REPORT.json is the only source of truth (machine↔machine). Required fields: run_id, started_at, ended_at, duration_ms, base_commit, head_commit, task, verdict, code, blast_radius, scope, diff, verification, budgets."
+    "why": "REPORT.md is a deterministic, human-readable rendering of REPORT.json. The orchestrator reads this markdown to understand tick results. It must be generated from REPORT.json, never the other way around.",
+    "deps": ["WP-050"],
+    "extract": "From PRD: REPORT.md is a deterministic rendering of REPORT.json (human/orchestrator friendly). Runner must generate REPORT.md from REPORT.json."
   },
 
   "subtasks": [
-    "1. Create src/types/report.ts with ReportData interface matching report.schema.json",
-    "2. Create src/lib/report.ts module for report generation",
-    "3. Implement generateRunId(): creates unique run identifier",
-    "4. Implement buildReport(tickData): constructs ReportData from tick results",
-    "5. Implement writeReport(report, path): writes report atomically",
-    "6. Include blast_radius, scope check result, diff summary, verification runs",
-    "7. Export from src/lib/index.ts"
+    "1. Add renderReportMarkdown function to src/lib/report.ts",
+    "2. Generate markdown header with run_id, timestamps, verdict, code",
+    "3. Render task summary section (task_id, milestone, intent)",
+    "4. Render blast radius section with file/line counts",
+    "5. Render scope section with violations if any",
+    "6. Render verification results with pass/fail for each run",
+    "7. Render budgets summary",
+    "8. Add writeReportMarkdown(report, path) function",
+    "9. Export new functions from src/lib/index.ts"
   ],
 
   "implementation": {
-    "ReportData_interface": {
-      "run_id": "string - unique run identifier",
-      "started_at": "string - ISO datetime",
-      "ended_at": "string - ISO datetime",
-      "duration_ms": "number - tick duration",
-      "base_commit": "string - commit SHA at tick start",
-      "head_commit": "string - commit SHA at tick end",
-      "task": "object - task_id, milestone_id, task_kind, intent",
-      "verdict": "success | stop | blocked",
-      "code": "string - result code (SUCCESS, STOP_*, BLOCKED_*)",
-      "blast_radius": "object - files_touched, lines_added, lines_deleted, new_files",
-      "scope": "object - ok, violations, touched_paths",
-      "diff": "object - files_changed, lines_changed, diff_patch_path",
-      "verification": "object - exec_mode, runs, verify_log_path",
-      "budgets": "object - milestone_id, ticks, orchestrator_calls, etc."
+    "markdown_sections": [
+      "# Relais Run Report",
+      "## Summary (run_id, timestamps, verdict, code)",
+      "## Task (task_id, milestone, kind, intent)",
+      "## Blast Radius (files_touched, lines_added, lines_deleted, new_files)",
+      "## Scope (ok/violations list)",
+      "## Verification (table: template_id, phase, exit_code, duration)",
+      "## Budgets (ticks, calls, cost)"
+    ],
+    "formatting": {
+      "verdict_success": "✓ SUCCESS",
+      "verdict_stop": "✗ STOP: <code>",
+      "verdict_blocked": "⚠ BLOCKED: <code>"
     }
   },
 
   "scope": {
-    "write": ["src/types/report.ts", "src/lib/report.ts", "src/lib/index.ts"],
-    "create_under": ["src/types/", "src/lib/"],
+    "write": ["src/lib/report.ts", "src/lib/index.ts"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "ReportData interface matches report.schema.json structure",
-    "generateRunId creates unique identifiers",
-    "buildReport constructs complete report from tick data",
-    "writeReport uses atomic write (from WP-014)",
-    "All required fields are populated",
+    "renderReportMarkdown produces valid markdown from ReportData",
+    "All sections are included with proper formatting",
+    "Verification runs shown in table format",
+    "Scope violations listed if any",
+    "writeReportMarkdown writes file to disk",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "Use writeJsonAtomic from src/lib/fs.ts for atomic writes",
-    "run_id format: timestamp + random suffix"
+    "Markdown should be deterministic (same input = same output)",
+    "Use simple markdown formatting (headers, tables, lists)"
   ]
 }

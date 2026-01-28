@@ -8,13 +8,14 @@
 
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { open, rename, unlink } from 'node:fs/promises';
 import type { ReportData, Verdict, ReportCode, BlastRadius, ScopeResult, DiffInfo, VerificationResult, BudgetInfo, TaskSummary, VerificationRun as ReportVerificationRun } from '../types/report.js';
 import type { TickState } from '../types/state.js';
 import type { DiffAnalysis } from './diff.js';
 import type { ScopeCheckResult } from './scope.js';
 import type { VerificationRun as VerifyRun } from './verify.js';
 import type { VerificationTemplate } from '../types/config.js';
-import { atomicWriteJson } from './fs.js';
+import { atomicWriteJson, AtomicFsError } from './fs.js';
 import { getHeadCommit } from './git.js';
 
 /**
@@ -241,4 +242,192 @@ export function buildReport(tickData: TickReportData): ReportData {
  */
 export async function writeReport(report: ReportData, filePath: string): Promise<void> {
   await atomicWriteJson(filePath, report);
+}
+
+/**
+ * Formats verdict and code for markdown display.
+ *
+ * @param verdict - The verdict value
+ * @param code - The report code
+ * @returns Formatted verdict string
+ */
+function formatVerdict(verdict: Verdict, code: ReportCode): string {
+  if (verdict === 'success') {
+    return '✓ SUCCESS';
+  } else if (verdict === 'stop') {
+    return `✗ STOP: ${code}`;
+  } else if (verdict === 'blocked') {
+    return `⚠ BLOCKED: ${code}`;
+  }
+  return `${verdict}: ${code}`;
+}
+
+/**
+ * Renders report data as markdown.
+ *
+ * Generates a deterministic, human-readable markdown representation
+ * of the report data. Same input always produces same output.
+ *
+ * @param report - Report data to render
+ * @returns Markdown string
+ */
+export function renderReportMarkdown(report: ReportData): string {
+  const lines: string[] = [];
+
+  // Header
+  lines.push('# Relais Run Report');
+  lines.push('');
+
+  // Summary section
+  lines.push('## Summary');
+  lines.push('');
+  lines.push(`- **Run ID**: ${report.run_id}`);
+  lines.push(`- **Started**: ${report.started_at}`);
+  lines.push(`- **Ended**: ${report.ended_at}`);
+  lines.push(`- **Duration**: ${report.duration_ms}ms`);
+  lines.push(`- **Verdict**: ${formatVerdict(report.verdict, report.code)}`);
+  lines.push(`- **Base Commit**: ${report.base_commit}`);
+  lines.push(`- **Head Commit**: ${report.head_commit}`);
+  lines.push('');
+
+  // Task section
+  lines.push('## Task');
+  lines.push('');
+  lines.push(`- **Task ID**: ${report.task.task_id}`);
+  lines.push(`- **Milestone**: ${report.task.milestone_id}`);
+  lines.push(`- **Kind**: ${report.task.task_kind}`);
+  lines.push(`- **Intent**: ${report.task.intent}`);
+  lines.push('');
+
+  // Blast Radius section
+  lines.push('## Blast Radius');
+  lines.push('');
+  lines.push(`- **Files Touched**: ${report.blast_radius.files_touched}`);
+  lines.push(`- **Lines Added**: ${report.blast_radius.lines_added}`);
+  lines.push(`- **Lines Deleted**: ${report.blast_radius.lines_deleted}`);
+  lines.push(`- **New Files**: ${report.blast_radius.new_files}`);
+  lines.push('');
+
+  // Scope section
+  lines.push('## Scope');
+  lines.push('');
+  if (report.scope.ok) {
+    lines.push('✓ **OK** - No violations');
+  } else {
+    lines.push('✗ **Violations**:');
+    for (const violation of report.scope.violations) {
+      lines.push(`  - ${violation}`);
+    }
+  }
+  if (report.scope.touched_paths.length > 0) {
+    lines.push('');
+    lines.push('**Touched Paths**:');
+    for (const path of report.scope.touched_paths) {
+      lines.push(`  - ${path}`);
+    }
+  }
+  lines.push('');
+
+  // Verification section
+  lines.push('## Verification');
+  lines.push('');
+  if (report.verification.runs.length === 0) {
+    lines.push('No verification runs.');
+  } else {
+    lines.push('| Template ID | Phase | Exit Code | Duration (ms) |');
+    lines.push('|-------------|-------|-----------|---------------|');
+    for (const run of report.verification.runs) {
+      const status = run.exit_code === 0 ? '✓' : '✗';
+      lines.push(`| ${run.template_id} | ${run.phase} | ${status} ${run.exit_code} | ${run.duration_ms} |`);
+    }
+  }
+  if (report.verification.verify_log_path) {
+    lines.push('');
+    lines.push(`**Log**: ${report.verification.verify_log_path}`);
+  }
+  lines.push('');
+
+  // Budgets section
+  lines.push('## Budgets');
+  lines.push('');
+  lines.push(`- **Milestone**: ${report.budgets.milestone_id}`);
+  lines.push(`- **Ticks**: ${report.budgets.ticks}`);
+  lines.push(`- **Orchestrator Calls**: ${report.budgets.orchestrator_calls}`);
+  lines.push(`- **Builder Calls**: ${report.budgets.builder_calls}`);
+  lines.push(`- **Verification Runs**: ${report.budgets.verify_runs}`);
+  lines.push(`- **Estimated Cost**: $${report.budgets.estimated_cost_usd.toFixed(4)}`);
+  if (report.budgets.warnings.length > 0) {
+    lines.push('');
+    lines.push('**Warnings**:');
+    for (const warning of report.budgets.warnings) {
+      lines.push(`  - ${warning}`);
+    }
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+/**
+ * Atomically writes markdown content to a file.
+ *
+ * Uses the same write-tmp-fsync-rename pattern as atomicWriteJson
+ * to ensure crash-safe writes.
+ *
+ * @param content - Markdown content to write
+ * @param filePath - Path to write the markdown file
+ * @returns Promise that resolves when write completes
+ * @throws {AtomicFsError} If the write operation fails
+ *
+ * @example
+ * ```typescript
+ * const markdown = renderReportMarkdown(report);
+ * await writeReportMarkdown(markdown, '/path/to/REPORT.md');
+ * ```
+ */
+export async function writeReportMarkdown(content: string, filePath: string): Promise<void> {
+  const tmpPath = `${filePath}.tmp`;
+  let fileHandle: Awaited<ReturnType<typeof open>> | null = null;
+
+  try {
+    // Ensure content ends with newline
+    const normalizedContent = content.endsWith('\n') ? content : content + '\n';
+
+    // Open file for writing, create if doesn't exist, truncate if exists
+    fileHandle = await open(tmpPath, 'w');
+
+    // Write the content
+    await fileHandle.writeFile(normalizedContent, 'utf-8');
+
+    // fsync to ensure data is flushed to disk
+    await fileHandle.sync();
+
+    // Close before rename
+    await fileHandle.close();
+    fileHandle = null;
+
+    // Atomic rename (POSIX guarantees atomicity)
+    await rename(tmpPath, filePath);
+  } catch (error) {
+    // Attempt to clean up the tmp file on error
+    if (fileHandle) {
+      try {
+        await fileHandle.close();
+      } catch {
+        // Ignore close errors during cleanup
+      }
+    }
+
+    try {
+      await unlink(tmpPath);
+    } catch {
+      // Ignore unlink errors - file may not exist
+    }
+
+    throw new AtomicFsError(
+      `Failed to atomically write markdown to ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      filePath,
+      error instanceof Error ? error : undefined
+    );
+  }
 }

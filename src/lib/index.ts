@@ -103,5 +103,7 @@ export {
   generateRunId as generateReportRunId,
   buildReport,
   writeReport,
+  renderReportMarkdown,
+  writeReportMarkdown,
   type TickReportData,
 } from './report.js';

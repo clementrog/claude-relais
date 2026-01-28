@@ -1,37 +1,37 @@
 {
   "v": 3,
-  "task": "WP-050",
+  "task": "WP-051",
   "status": "DONE",
   "subtasks_completed": [
-    "Created src/lib/report.ts module with generateRunId, buildReport, and writeReport functions",
-    "Implemented generateRunId() with timestamp + random suffix format",
-    "Implemented buildReport(tickData) to construct complete ReportData from tick results",
-    "Implemented writeReport(report, path) using atomicWriteJson for atomic writes",
-    "Included blast_radius, scope check result, diff summary, and verification runs transformation",
-    "Exported report functions from src/lib/index.ts"
+    "1. Added renderReportMarkdown function to src/lib/report.ts",
+    "2. Generated markdown header with run_id, timestamps, verdict, code",
+    "3. Rendered task summary section (task_id, milestone, kind, intent)",
+    "4. Rendered blast radius section with file/line counts",
+    "5. Rendered scope section with violations if any",
+    "6. Rendered verification results with pass/fail for each run",
+    "7. Rendered budgets summary",
+    "8. Added writeReportMarkdown(report, path) function",
+    "9. Exported new functions from src/lib/index.ts"
   ],
   "git_diff_files": [
-    "src/lib/index.ts",
-    "src/lib/report.ts"
+    "src/lib/report.ts",
+    "src/lib/index.ts"
   ],
   "files": {
-    "changed": ["src/lib/index.ts"],
-    "created": ["src/lib/report.ts"],
+    "changed": [
+      "src/lib/report.ts",
+      "src/lib/index.ts"
+    ],
+    "created": [],
     "deleted": []
   },
   "verify": [
     {
       "cmd": "pnpm build",
       "exit": 0,
-      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc\n"
+      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [
-    "ReportData interface already exists in src/types/report.ts and matches report.schema.json",
-    "generateRunId is exported as generateReportRunId to avoid conflict with existing generateRunId from state.ts",
-    "buildReport accepts TickReportData interface with all necessary tick execution data",
-    "Verification runs are transformed from verify.ts format to report format with phase, cmd, args",
-    "All required fields from report.schema.json are populated in buildReport"
-  ],
+  "notes": [],
   "blockers": []
 }
