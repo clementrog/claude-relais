@@ -1,23 +1,30 @@
 {
   "v": 3,
-  "task": "WP-040",
+  "task": "WP-041",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Created src/lib/diff.ts module for diff analysis functions",
-    "2. Implemented getTouchedTracked(baseCommit): gets files from git diff --name-status",
-    "3. Implemented getTouchedUntracked(): gets new/modified untracked files from git status --porcelain",
-    "4. Implemented getDiffStats(baseCommit): gets lines added/deleted from git diff --numstat",
-    "5. Created DiffAnalysis interface with files_touched, lines_added, lines_deleted, new_files, touched_paths",
-    "6. Implemented analyzeDiff(baseCommit): returns full DiffAnalysis",
-    "7. Exported from src/lib/index.ts"
+    "Created src/lib/scope.ts module with scope checking functions",
+    "Implemented matchesGlob(path, patterns) function using micromatch",
+    "Implemented checkScopeViolations(touchedPaths, untrackedPaths, taskScope, config) function",
+    "Created ScopeCheckResult interface with ok, violations, touched_paths fields",
+    "Created ScopeViolation interface with type, path, detail fields",
+    "Implemented forbidden_globs violation checking",
+    "Implemented allowed_globs violation checking (path must match at least one)",
+    "Implemented allow_new_files violation checking",
+    "Implemented allow_lockfile_changes violation checking using config.scope.lockfiles",
+    "Exported all functions and types from src/lib/index.ts",
+    "Added micromatch dependency to package.json",
+    "Added @types/micromatch dev dependency"
   ],
   "git_diff_files": [
-    "src/lib/diff.ts",
-    "src/lib/index.ts"
+    "package.json",
+    "pnpm-lock.yaml",
+    "src/lib/index.ts",
+    "src/lib/scope.ts"
   ],
   "files": {
-    "changed": ["src/lib/index.ts"],
-    "created": ["src/lib/diff.ts"],
+    "changed": ["src/lib/index.ts", "package.json"],
+    "created": ["src/lib/scope.ts"],
     "deleted": []
   },
   "verify": [
@@ -27,6 +34,11 @@
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [],
+  "notes": [
+    "Added micromatch@^4.0.8 and @types/micromatch@^4.0.10 as dependencies (required for glob matching)",
+    "Used default import for micromatch (v4 uses default export)",
+    "Implemented isLockfile helper function to check if path matches lockfile patterns",
+    "All scope violation types are exported as constants for use by judge phase"
+  ],
   "blockers": []
 }

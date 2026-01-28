@@ -1,66 +1,69 @@
 {
   "v": 5,
-  "id": "WP-040",
+  "id": "WP-041",
   "milestone": "M5",
-  "goal": "Implement git diff analysis to compute touched set for Judge phase",
+  "goal": "Implement scope enforcement using glob matching against touched paths",
 
   "context": {
-    "why": "Judge needs to compute the 'touched set' (all files modified by builder) to enforce scope rules and diff limits. This is based on git reality, not builder's self-report.",
-    "deps": ["WP-012"],
-    "extract": "From PRD Section 10: Touched set = tracked (git diff --name-status base_commit..HEAD) + untracked (git status --porcelain). Compute files_touched, lines_added, lines_deleted, new_files."
+    "why": "Judge must verify that all touched paths comply with task scope: match allowed_globs, don't match forbidden_globs, and respect allow_new_files and allow_lockfile_changes flags.",
+    "deps": ["WP-040"],
+    "extract": "From PRD Section 10: touched matches forbidden_globs → STOP(scope_violation_forbidden). touched not matched by allowed_globs → STOP(scope_violation_outside_allowed). new files created when allow_new_files=false → STOP(new_file_forbidden). lockfile touched when allow_lockfile_changes=false → STOP(lockfile_change_forbidden)."
   },
 
   "subtasks": [
-    "1. Create src/lib/diff.ts module for diff analysis functions",
-    "2. Implement getTouchedTracked(baseCommit): get files from git diff --name-status",
-    "3. Implement getTouchedUntracked(): get new/modified untracked files from git status --porcelain",
-    "4. Implement getDiffStats(baseCommit): get lines added/deleted from git diff --numstat",
-    "5. Create DiffAnalysis interface with files_touched, lines_added, lines_deleted, new_files, touched_paths",
-    "6. Implement analyzeDiff(baseCommit): returns full DiffAnalysis",
-    "7. Export from src/lib/index.ts"
+    "1. Create src/lib/scope.ts module for scope checking functions",
+    "2. Implement matchesGlob(path, patterns): check if path matches any glob pattern",
+    "3. Implement checkScopeViolations(touchedPaths, taskScope, config): returns ScopeCheckResult",
+    "4. Create ScopeCheckResult interface with ok, violations, touched_paths",
+    "5. Check forbidden_globs violations",
+    "6. Check allowed_globs violations (path must match at least one)",
+    "7. Check allow_new_files violations",
+    "8. Check allow_lockfile_changes violations using config.scope.lockfiles list",
+    "9. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "DiffAnalysis_interface": {
-      "files_touched": "number - total files in touched set",
-      "lines_added": "number - total lines added",
-      "lines_deleted": "number - total lines deleted",
-      "new_files": "number - count of newly created files",
-      "touched_paths": "string[] - all paths in touched set (tracked + untracked)"
+    "ScopeCheckResult_interface": {
+      "ok": "boolean - true if no violations",
+      "violations": "ScopeViolation[] - list of violations found",
+      "touched_paths": "string[] - all paths that were checked"
     },
-    "git_commands": {
-      "tracked_changes": "git diff --name-status <base_commit>..HEAD",
-      "untracked_files": "git status --porcelain (filter lines starting with ?? or A)",
-      "line_stats": "git diff --numstat <base_commit>..HEAD"
+    "ScopeViolation_interface": {
+      "type": "string - violation type (forbidden, outside_allowed, new_file_forbidden, lockfile_forbidden)",
+      "path": "string - the path that violated scope",
+      "detail": "string - human-readable explanation"
     },
-    "notes": [
-      "Use execGitCommand from src/lib/git.ts for git operations",
-      "Parse name-status output: A=added, M=modified, D=deleted, R=renamed",
-      "Parse numstat output: lines_added lines_deleted filename (tab-separated)",
-      "Handle binary files in numstat (shows - - instead of numbers)"
+    "glob_matching": "Use micromatch or minimatch for glob pattern matching",
+    "violation_types": [
+      "SCOPE_VIOLATION_FORBIDDEN - path matches forbidden_globs",
+      "SCOPE_VIOLATION_OUTSIDE_ALLOWED - path doesn't match any allowed_globs",
+      "NEW_FILE_FORBIDDEN - new file created when allow_new_files=false",
+      "LOCKFILE_CHANGE_FORBIDDEN - lockfile touched when allow_lockfile_changes=false"
     ]
   },
 
   "scope": {
-    "write": ["src/lib/diff.ts", "src/lib/index.ts"],
+    "write": ["src/lib/scope.ts", "src/lib/index.ts"],
     "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "getTouchedTracked returns array of paths changed since base commit",
-    "getTouchedUntracked returns array of new untracked files",
-    "getDiffStats returns lines added and deleted",
-    "analyzeDiff returns complete DiffAnalysis object",
-    "Functions handle empty diff gracefully",
+    "matchesGlob correctly matches paths against glob patterns",
+    "Forbidden glob violations are detected",
+    "Outside-allowed violations are detected",
+    "New file violations are detected when allow_new_files=false",
+    "Lockfile violations are detected when allow_lockfile_changes=false",
+    "ScopeCheckResult contains all violations with clear details",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "LOW",
+  "risk": "MED",
   "notes": [
-    "This is the foundation for scope enforcement in WP-041",
-    "baseCommit will come from TickState (tracked as base_commit_sha)"
+    "Use micromatch (already commonly used) for glob matching",
+    "Lockfiles list comes from config.scope.lockfiles",
+    "New files are detected by checking if path exists in untracked set"
   ]
 }

@@ -66,3 +66,14 @@ export {
   analyzeDiff,
   type DiffAnalysis,
 } from './diff.js';
+
+export {
+  matchesGlob,
+  checkScopeViolations,
+  SCOPE_VIOLATION_FORBIDDEN,
+  SCOPE_VIOLATION_OUTSIDE_ALLOWED,
+  NEW_FILE_FORBIDDEN,
+  LOCKFILE_CHANGE_FORBIDDEN,
+  type ScopeCheckResult,
+  type ScopeViolation,
+} from './scope.js';

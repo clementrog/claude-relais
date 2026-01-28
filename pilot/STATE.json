@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-040",
+  "task": "WP-041",
   "milestone": "M5",
-  "branch": "task/wp-040-diff-analysis",
+  "branch": "task/wp-041-scope-enforcement",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T12:30:00Z"
+  "ts": "2026-01-28T12:40:00Z"
 }
