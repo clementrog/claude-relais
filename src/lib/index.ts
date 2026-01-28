@@ -52,3 +52,9 @@ export {
   parseClaudeResponse,
   invokeClaudeCode,
 } from './claude.js';
+
+export {
+  loadSchema,
+  validateWithSchema,
+  type ValidationResult,
+} from './schema.js';

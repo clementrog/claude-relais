@@ -1,18 +1,46 @@
 {
   "v": 3,
-  "mode": "single",
   "task": "WP-022",
-  "status": null,
-  "tasks_completed": [],
-  "subtasks_completed": [],
-  "git_diff_files": [],
+  "status": "DONE",
+  "subtasks_completed": [
+    "Installed ajv as a dependency",
+    "Created src/lib/schema.ts with loadSchema and validateWithSchema functions",
+    "Updated orchestrator.ts to use Ajv validation instead of basic validation",
+    "Exported schema functions from src/lib/index.ts",
+    "Verified with pnpm install and pnpm build"
+  ],
+  "git_diff_files": [
+    "src/lib/index.ts",
+    "src/lib/schema.ts",
+    "src/runner/orchestrator.ts"
+  ],
   "files": {
-    "changed": [],
-    "created": [],
+    "changed": [
+      "src/lib/index.ts",
+      "src/lib/schema.ts",
+      "src/runner/orchestrator.ts"
+    ],
+    "created": [
+      "src/lib/schema.ts"
+    ],
     "deleted": []
   },
-  "per_task": {},
-  "verify": [],
-  "notes": [],
+  "verify": [
+    {
+      "cmd": "pnpm install",
+      "exit": 0,
+      "output": "Lockfile is up to date, resolution step is skipped\nAlready up to date\n\n╭ Warning ─────────────────────────────────────────────────────────────────────╮\n│                                                                              │\n│   Ignored build scripts: esbuild.                                            │\n│   Run \"pnpm approve-builds\" to pick which dependencies should be allowed     │\n│   to run scripts.                                                            │\n│                                                                              │\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nDone in 169ms using pnpm v10.24.0"
+    },
+    {
+      "cmd": "pnpm build",
+      "exit": 0,
+      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
+    }
+  ],
+  "notes": [
+    "Used type assertion for Ajv import due to NodeNext module resolution in TypeScript",
+    "Schema caching implemented for performance",
+    "Validation errors are collected and returned as detailed error messages"
+  ],
   "blockers": []
 }

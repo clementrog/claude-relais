@@ -178,7 +178,7 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
 
     return {
       success: true,
-      task: parsed as Task,
+      task: validationResult.data!,
       error: null,
       rawResponse: response.result,
     };

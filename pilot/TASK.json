@@ -1,62 +1,65 @@
 {
   "v": 5,
-  "id": "WP-022",
+  "id": "WP-023",
   "milestone": "M3",
-  "goal": "Add JSON Schema validation for TASK.json using Ajv",
+  "goal": "Implement orchestrator parse retry logic (1 retry on invalid JSON)",
 
   "context": {
-    "why": "PRD requires that orchestrator output validates against task.schema.json. Using Ajv provides robust validation with clear error messages.",
-    "deps": ["WP-021"],
-    "extract": "From PRD: Orchestrator output MUST be a single JSON object that validates against task.schema.json. If invalid, runner retries once with appended retry_reason."
+    "why": "PRD allows one retry if orchestrator outputs invalid JSON/schema. The retry includes the error reason in the prompt.",
+    "deps": ["WP-021", "WP-022"],
+    "extract": "From PRD Section 8: If invalid, runner retries once with appended retry_reason. If still invalid → BLOCKED(orchestrator_output_invalid)."
   },
 
   "subtasks": [
-    "1. Install ajv as a dependency (pnpm add ajv)",
-    "2. Create src/lib/schema.ts with loadSchema and validateWithSchema functions",
-    "3. Load task.schema.json from relais/schemas/",
-    "4. Update orchestrator.ts to use Ajv validation instead of basic validation",
-    "5. Return detailed validation errors for debugging",
-    "6. Export from index files"
+    "1. Update runOrchestrator to support retry with reason",
+    "2. Add retry_reason parameter to prompt building",
+    "3. Track retry attempt count (max 1 retry)",
+    "4. Return BLOCKED_ORCHESTRATOR_OUTPUT_INVALID after failed retry",
+    "5. Log retry attempts for debugging"
   ],
 
   "implementation": {
-    "loadSchema": {
-      "signature": "async function loadSchema(schemaPath: string): Promise<object>",
-      "behavior": "Load and parse JSON schema file"
+    "runOrchestrator_update": {
+      "behavior": [
+        "1. First attempt: call orchestrator normally",
+        "2. If JSON parse fails or schema validation fails:",
+        "   a. If no retry yet: build retry prompt with error reason",
+        "   b. Call orchestrator again with retry prompt",
+        "3. If second attempt also fails: return BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
+        "4. Track attempts in OrchestratorResult"
+      ]
     },
-    "validateWithSchema": {
-      "signature": "function validateWithSchema<T>(data: unknown, schema: object): ValidationResult<T>",
-      "behavior": "Validate data against schema, return typed result or errors"
+    "OrchestratorResult_update": {
+      "add_fields": {
+        "attempts": "number - how many orchestrator calls made (1 or 2)",
+        "retryReason": "string | null - the error that triggered retry"
+      }
     },
-    "ValidationResult": {
-      "valid": "boolean",
-      "data": "T | null - typed data if valid",
-      "errors": "string[] - validation error messages"
-    },
-    "integration": {
-      "note": "Update parseTaskFromResponse in orchestrator.ts to use validateWithSchema"
+    "retry_prompt_format": {
+      "note": "Append to user prompt:",
+      "format": "\\n\\n=== RETRY ===\\nYour previous output was invalid: {{RETRY_REASON}}\\nPlease output ONLY valid JSON matching the schema."
     }
   },
 
   "scope": {
     "write": ["src/runner/orchestrator.ts"],
-    "create_under": ["src/lib"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*"]
+    "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "ajv is installed as dependency",
-    "src/lib/schema.ts exists with loadSchema and validateWithSchema",
-    "orchestrator.ts uses Ajv for task validation",
-    "Invalid tasks return clear error messages",
+    "runOrchestrator retries once on invalid output",
+    "Retry prompt includes the error reason",
+    "Returns BLOCKED_ORCHESTRATOR_OUTPUT_INVALID after second failure",
+    "OrchestratorResult includes attempts count",
     "pnpm build succeeds"
   ],
 
-  "verify": ["pnpm install", "pnpm build"],
-  "risk": "MED",
+  "verify": ["pnpm build"],
+  "risk": "LOW",
   "notes": [
-    "Use ajv with draft-2020-12 support",
-    "Cache compiled schema for performance"
+    "Keep retry logic simple - just one retry",
+    "Error reason should be concise but helpful"
   ]
 }

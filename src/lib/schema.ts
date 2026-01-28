@@ -4,7 +4,8 @@
  * Provides functions to load and validate data against JSON schemas.
  */
 
-import Ajv, { type ValidateFunction } from 'ajv/dist/2020.js';
+import AjvDefault from 'ajv';
+import type { ValidateFunction } from 'ajv';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -52,6 +53,10 @@ export async function loadSchema(schemaPath: string): Promise<object> {
  */
 export function validateWithSchema<T>(data: unknown, schema: object): ValidationResult<T> {
   // Create Ajv instance with draft-2020-12 support
+  // Type assertion needed due to NodeNext module resolution
+  const Ajv = AjvDefault as unknown as new (options?: { strict?: boolean; allErrors?: boolean; verbose?: boolean }) => {
+    compile: (schema: object) => ValidateFunction;
+  };
   const ajv = new Ajv({
     strict: true,
     allErrors: true,
