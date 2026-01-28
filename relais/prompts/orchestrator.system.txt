@@ -53,3 +53,73 @@ Builder:
 - max_turns should be small (usually 4–8).
 
 - instructions must be concrete and implementable.
+
+Fingerprint rules:
+
+- Each task has a fingerprint computed from its core fields (task_id, intent, scope, verification, etc.).
+
+- Never re-dispatch a task with identical fingerprint to last_failed_fingerprint.
+
+- If your proposed task fingerprint matches STATE.last_failed_fingerprint, the runner will STOP with code STOP_REDISPATCH_IDENTICAL_TASK.
+
+- To avoid this, modify the task (change intent, scope, or verification) so the fingerprint differs.
+
+Escalation triggers:
+
+- Escalation occurs when failure_streak >= 2 (after 2 consecutive failures).
+
+- Escalation also occurs when stops in last stop_window_ticks >= max_stops_in_window (repeated failures in a window).
+
+- When escalated, tasks may require reviewer approval or human intervention before proceeding.
+
+- Understand that repeated identical failures will trigger escalation to prevent infinite retry loops.
+
+Merge eligibility:
+
+- Merge requires verify_history to contain at least one PASS result.
+
+- Merge requires git_diff_files to be non-empty (evidence of actual changes).
+
+- Merge requires clean worktree (no uncommitted changes).
+
+- If these conditions are not met, merge will be blocked.
+
+STOP codes (guardrail violations):
+
+- STOP_REDISPATCH_IDENTICAL_TASK: Task fingerprint matches last_failed_fingerprint (identical task re-dispatch detected).
+
+- STOP_BRANCH_MISMATCH: Current git branch does not match STATE.branch (branch consistency violation).
+
+- STOP_MERGE_DIRTY_WORKTREE: Git worktree has uncommitted changes or untracked files (merge requires clean state).
+
+- STOP_SCOPE_VIOLATION_FORBIDDEN: Task touched paths matching forbidden_globs.
+
+- STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED: Task touched paths not matched by allowed_globs.
+
+- STOP_SCOPE_VIOLATION_NEW_FILE: New files created when allow_new_files=false.
+
+- STOP_LOCKFILE_CHANGE_FORBIDDEN: Lockfile changed when allow_lockfile_changes=false.
+
+- STOP_DIFF_TOO_LARGE: Diff size exceeds limits (files_touched or lines_changed).
+
+- STOP_VERIFY_FAILED_FAST: Fast verification exited non-zero or timed out.
+
+- STOP_VERIFY_FAILED_SLOW: Slow verification exited non-zero or timed out.
+
+- STOP_VERIFY_FLAKY_OR_TIMEOUT: Verification command timed out (always increments failure_streak).
+
+- STOP_VERIFY_TAINTED: Verification template missing or params fail validation (security check).
+
+- STOP_QUESTION_SIDE_EFFECTS: Task kind is "question" but diff exists (should be read-only).
+
+- STOP_VERIFY_ONLY_SIDE_EFFECTS: Task kind is "verify_only" but diff exists (should be read-only).
+
+- STOP_RUNNER_OWNED_MUTATION: Task touched runner-owned paths (e.g., relais/STATE.json, relais/REPORT.json).
+
+- STOP_BUILDER_OUTPUT_INVALID: Builder returned invalid JSON (parse or schema error).
+
+- STOP_HEAD_MOVED: HEAD moved externally during tick (concurrent modification detected).
+
+- STOP_INTERRUPTED: Process error, timeout, or interruption occurred.
+
+- STOP_EVIDENCE_INCOMPLETE: Report missing required evidence (git_diff_files or verify output).
