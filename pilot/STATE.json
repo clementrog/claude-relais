@@ -1,13 +1,13 @@
 {
   "v": 3,
-  "phase": "BUILD",
-  "mode": "single",
-  "task": "WP-001",
-  "milestone": "M1",
-  "branch": "task/wp-001-project-init",
+  "phase": "IDLE",
+  "mode": null,
+  "task": null,
+  "milestone": "M2",
+  "branch": "main",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
-  "next": "VERIFY",
-  "ts": "2026-01-28T10:02:00Z"
+  "next": "PLAN",
+  "ts": "2026-01-28T10:20:00Z"
 }

@@ -7,12 +7,12 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M1",
+  "current": "M2",
   "milestones": [
     {
       "id": "M1",
       "title": "Project Scaffolding",
-      "status": "pending",
+      "status": "completed",
       "risk": "LOW",
       "tasks": [
         "WP-001: Initialize Node.js/TypeScript project with pnpm",
