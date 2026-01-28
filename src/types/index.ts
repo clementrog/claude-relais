@@ -41,6 +41,8 @@ export {
 export type {
   TickState,
   TickContext,
+  StopHistoryEntry,
+  GuardrailState,
 } from './state.js';
 
 export type { BuilderResult } from './builder.js';

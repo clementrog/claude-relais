@@ -7,7 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import type { RelaisConfig } from '../types/config.js';
 import { TickPhase } from '../types/state.js';
-import type { TickState } from '../types/state.js';
+import type { TickState, GuardrailState, StopHistoryEntry } from '../types/state.js';
 
 /**
  * Generates a unique run ID for a tick.
@@ -95,5 +95,80 @@ export function setBuilderResult(
   return {
     ...state,
     builder_result: builderResult,
+  };
+}
+
+/**
+ * Appends a stop history entry to guardrail state, capping at 50 entries.
+ *
+ * @param state - Current tick state
+ * @param entry - Stop history entry to add
+ * @returns Updated tick state
+ */
+export function appendStopHistory(
+  state: TickState,
+  entry: StopHistoryEntry
+): TickState {
+  const guardrail: GuardrailState = state.guardrail ?? {
+    force_patch_until_success: false,
+    last_risk_flags: [],
+    stop_history: [],
+  };
+
+  // Add entry and cap to 50 entries (keep most recent)
+  const updatedHistory = [...guardrail.stop_history, entry].slice(-50);
+
+  return {
+    ...state,
+    guardrail: {
+      ...guardrail,
+      stop_history: updatedHistory,
+    },
+  };
+}
+
+/**
+ * Clears force patch flag (sets force_patch_until_success to false).
+ *
+ * Called when a patch succeeds to reset escalation state.
+ *
+ * @param state - Current tick state
+ * @returns Updated tick state
+ */
+export function clearForcePatch(state: TickState): TickState {
+  if (!state.guardrail) {
+    return state;
+  }
+
+  return {
+    ...state,
+    guardrail: {
+      ...state.guardrail,
+      force_patch_until_success: false,
+    },
+  };
+}
+
+/**
+ * Sets force patch flag (sets force_patch_until_success to true).
+ *
+ * Called to enable escalation mode when guardrails trigger.
+ *
+ * @param state - Current tick state
+ * @returns Updated tick state
+ */
+export function setForcePatch(state: TickState): TickState {
+  const guardrail: GuardrailState = state.guardrail ?? {
+    force_patch_until_success: false,
+    last_risk_flags: [],
+    stop_history: [],
+  };
+
+  return {
+    ...state,
+    guardrail: {
+      ...guardrail,
+      force_patch_until_success: true,
+    },
   };
 }

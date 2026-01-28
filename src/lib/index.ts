@@ -45,6 +45,9 @@ export {
   addError,
   setTask,
   setBuilderResult,
+  appendStopHistory,
+  clearForcePatch,
+  setForcePatch,
 } from './state.js';
 
 export {
