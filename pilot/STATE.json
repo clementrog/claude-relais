@@ -1,13 +1,13 @@
 {
   "v": 3,
-  "phase": "DISPATCH",
-  "mode": "single",
-  "task": "WP-023",
-  "milestone": "M3",
-  "branch": "task/wp-023-retry-logic",
+  "phase": "IDLE",
+  "mode": null,
+  "task": null,
+  "milestone": "M4",
+  "branch": "main",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
-  "next": "BUILD",
-  "ts": "2026-01-28T11:45:00Z"
+  "next": "PLAN",
+  "ts": "2026-01-28T11:50:00Z"
 }

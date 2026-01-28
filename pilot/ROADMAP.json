@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M3",
+  "current": "M4",
   "milestones": [
     {
       "id": "M1",
@@ -38,7 +38,7 @@
     {
       "id": "M3",
       "title": "Orchestrator Integration",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
         "WP-020: Claude Code CLI wrapper",
