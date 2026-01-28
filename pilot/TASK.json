@@ -1,57 +1,52 @@
 {
   "v": 5,
-  "id": "WP-076",
+  "id": "WP-077",
   "milestone": "M8",
-  "goal": "Add doctor checks for Codex CLI reviewer",
+  "goal": "Implement reviewer fixture tests R101-R104",
 
   "context": {
-    "why": "The 'relais doctor' command should verify Codex CLI availability and auth status so users know if reviewer feature will work.",
-    "deps": ["WP-075"],
-    "extract": "From PRD Appendix C3: Doctor checks codex --version, auth status (api_key_present or chatgpt_login_ok), prints reviewer mode (enabled/disabled, auth mode)."
+    "why": "Complete M8 with fixture tests that validate reviewer escalation behavior: force_patch triggers, ask_question handling, auth degradation, and repeated stop detection.",
+    "deps": ["WP-076"],
+    "extract": "From PRD Appendix C9: R101 high_risk_path_triggers_reviewer_force_patch, R102 reviewer_ask_question, R103 reviewer_missing_auth_degrades, R104 repeated_stop_triggers_reviewer."
   },
 
   "subtasks": [
-    "1. Add checkCodexCli() function to src/lib/doctor.ts",
-    "2. Check 'codex --version' succeeds (CLI available)",
-    "3. Check CODEX_API_KEY env var presence for auth status",
-    "4. Add ReviewerDoctorResult type with cli_available, auth_status fields",
-    "5. Integrate into existing doctor checks",
-    "6. Export from src/lib/index.ts"
+    "1. Create tests/fixtures/R101-high-risk-force-patch.test.ts",
+    "2. Create tests/fixtures/R102-reviewer-ask-question.test.ts",
+    "3. Create tests/fixtures/R103-reviewer-auth-degrades.test.ts",
+    "4. Create tests/fixtures/R104-repeated-stop-triggers.test.ts"
   ],
 
   "implementation": {
-    "checks": {
-      "cli_available": "spawn codex --version, check exit code 0",
-      "auth_status": "api_key_present if CODEX_API_KEY set, else unknown (best-effort)",
-      "reviewer_mode": "Read from config: enabled, auth.mode"
+    "fixtures": {
+      "R101": "Task scope includes infra/**, reviewer returns force_patch -> STOP_REVIEWER_FORCED_PATCH, builder not called",
+      "R102": "Reviewer returns ask_question -> STOP_REVIEWER_ASK_QUESTION, report includes question",
+      "R103": "Simulate codex CLI auth error -> reviewer_error recorded, force_patch_until_success set",
+      "R104": "stop_history has >=2 stops in window -> reviewer triggered on next tick"
     },
-    "output": {
-      "success": "✓ codex cli: available (vX.X.X)",
-      "auth_ok": "✓ codex auth: api_key_present",
-      "auth_missing": "✗ codex auth: missing (run 'codex login' or set CODEX_API_KEY)",
-      "disabled": "○ reviewer: disabled"
-    }
+    "test_approach": "Unit test the risk.ts and reviewer-flow.ts functions with mocked inputs"
   },
 
   "scope": {
-    "write": ["src/lib/doctor.ts", "src/lib/index.ts"],
-    "create_under": [],
+    "write": ["tests/fixtures/**/*.ts"],
+    "create_under": ["tests/fixtures/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "tests/**"]
+    "forbidden": ["pilot/*", "relais/*", "src/**"]
   },
 
   "acceptance": [
-    "checkCodexCli returns ReviewerDoctorResult",
-    "CLI check spawns 'codex --version' with shell:false",
-    "Auth check reads CODEX_API_KEY from process.env",
-    "Results include cli_available, auth_status, version fields",
-    "pnpm build succeeds"
+    "All 4 reviewer fixtures (R101-R104) implemented",
+    "R101 tests force_patch decision -> STOP_REVIEWER_FORCED_PATCH",
+    "R102 tests ask_question decision -> STOP_REVIEWER_ASK_QUESTION with question",
+    "R103 tests auth failure graceful degradation",
+    "R104 tests repeated stop window triggers reviewer",
+    "pnpm test passes with all fixture tests"
   ],
 
-  "verify": ["pnpm build"],
-  "risk": "LOW",
+  "verify": ["pnpm build", "pnpm test run"],
+  "risk": "MED",
   "notes": [
-    "Auth check is best-effort - only env var presence",
-    "If codex CLI not found, reviewer features degrade gracefully"
+    "This completes M8: Review Escalation",
+    "Tests use mocks for Codex CLI - no actual API calls"
   ]
 }
