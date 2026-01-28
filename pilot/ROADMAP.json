@@ -94,6 +94,22 @@
         "WP-061: Fixtures F001-F006",
         "WP-062: Fixtures F007-F012"
       ]
+    },
+    {
+      "id": "M8",
+      "title": "Review Escalation",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-070: Reviewer config types (reviewer section in relais.config.json)",
+        "WP-071: Codex CLI wrapper (invocation, auth handling, output parsing)",
+        "WP-072: Reviewer schema + prompts (reviewer_result.schema.json, reviewer.system.txt, reviewer.user.txt)",
+        "WP-073: Risk scoring + trigger logic (high_risk_globs, diff_fraction, repeated_stop)",
+        "WP-074: Integrate reviewer into tick flow (new STOP codes: STOP_REVIEWER_FORCED_PATCH, STOP_REVIEWER_ASK_QUESTION)",
+        "WP-075: STATE.json guardrail fields (force_patch_until_success, stop_history)",
+        "WP-076: Doctor checks for reviewer (codex --version, auth status)",
+        "WP-077: Reviewer fixtures R101-R104"
+      ]
     }
   ]
 }

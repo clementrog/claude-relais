@@ -1,56 +1,15 @@
 {
   "v": 3,
-  "task": "WP-061",
-  "status": "DONE",
-  "subtasks_completed": [
-    "1. Created tests/fixtures/F001-tick-limits.test.ts - verifies orchestrator_calls <= 2, builder_calls == 1",
-    "2. Created tests/fixtures/F002-orchestrator-invalid.test.ts - invalid JSON twice -> BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
-    "3. Created tests/fixtures/F003-question-side-effects.test.ts - question kind with edits -> STOP_QUESTION_SIDE_EFFECTS",
-    "4. Created tests/fixtures/F004-verify-only-side-effects.test.ts - verify_only with edits -> STOP_VERIFY_ONLY_SIDE_EFFECTS",
-    "5. Created tests/fixtures/F005-scope-outside-allowed.test.ts - edit outside allowed_globs -> STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED",
-    "6. Created tests/fixtures/F006-forbidden-path.test.ts - edit forbidden path -> STOP_RUNNER_OWNED_MUTATION",
-    "7. Created test helpers/mocks.ts for simulating runner states"
-  ],
-  "git_diff_files": [
-    "tests/fixtures/F001-tick-limits.test.ts",
-    "tests/fixtures/F002-orchestrator-invalid.test.ts",
-    "tests/fixtures/F003-question-side-effects.test.ts",
-    "tests/fixtures/F004-verify-only-side-effects.test.ts",
-    "tests/fixtures/F005-scope-outside-allowed.test.ts",
-    "tests/fixtures/F006-forbidden-path.test.ts",
-    "tests/helpers/mocks.ts"
-  ],
+  "task": "WP-062",
+  "status": "IN_PROGRESS",
+  "subtasks_completed": [],
+  "git_diff_files": [],
   "files": {
     "changed": [],
-    "created": [
-      "tests/fixtures/F001-tick-limits.test.ts",
-      "tests/fixtures/F002-orchestrator-invalid.test.ts",
-      "tests/fixtures/F003-question-side-effects.test.ts",
-      "tests/fixtures/F004-verify-only-side-effects.test.ts",
-      "tests/fixtures/F005-scope-outside-allowed.test.ts",
-      "tests/fixtures/F006-forbidden-path.test.ts",
-      "tests/helpers/mocks.ts"
-    ],
+    "created": [],
     "deleted": []
   },
-  "verify": [
-    {
-      "cmd": "pnpm build",
-      "exit": 0,
-      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
-    },
-    {
-      "cmd": "pnpm test run",
-      "exit": 0,
-      "output": "Test Files  8 passed (8)\n     Tests  40 passed (40)\n  Start at  16:14:32\n  Duration  741ms (transform 744ms, setup 0ms, import 1.33s, tests 252ms, environment 1ms)"
-    }
-  ],
-  "notes": [
-    "All 6 fixture tests (F001-F006) implemented as unit tests of lib functions",
-    "Tests validate expected STOP/BLOCKED codes correctly",
-    "Scope enforcement tests use actual checkScopeViolations function from lib/scope.ts",
-    "Mock helpers created for simulating runner states, tasks, and configurations",
-    "All tests pass successfully"
-  ],
+  "verify": [],
+  "notes": [],
   "blockers": []
 }

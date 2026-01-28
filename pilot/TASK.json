@@ -1,56 +1,56 @@
 {
   "v": 5,
-  "id": "WP-061",
+  "id": "WP-062",
   "milestone": "M7",
-  "goal": "Implement fixture tests F001-F006 for core runner behaviors",
+  "goal": "Implement fixture tests F007-F012 for remaining runner behaviors",
 
   "context": {
-    "why": "Fixture tests validate critical runner behaviors: tick limits, orchestrator output validation, side effect detection, scope enforcement. These are contract tests that ensure the runner behaves correctly.",
-    "deps": ["WP-060"],
-    "extract": "From PRD: F001 one_tick_limits, F002 orchestrator_invalid_json_blocks, F003 question_no_side_effects, F004 verify_only_no_side_effects, F005 scope_violation_outside_allowed, F006 forbidden_path_violation."
+    "why": "Complete the fixture test suite with tests for new file restrictions, lockfile changes, diff limits, verification taint, fast-fail behavior, and crash recovery. These are the final tests for V1.",
+    "deps": ["WP-061"],
+    "extract": "From PRD: F007 new_file_rejected, F008 lockfile_change_rejected, F009 diff_too_large, F010 verify_taint_rejected, F011 verify_fast_fail_stops, F012 crash_tmp_cleanup_blocks_if_invalid."
   },
 
   "subtasks": [
-    "1. Create tests/fixtures/F001-tick-limits.test.ts - verify orchestrator_calls <= 2, builder_calls == 1",
-    "2. Create tests/fixtures/F002-orchestrator-invalid.test.ts - invalid JSON twice -> BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
-    "3. Create tests/fixtures/F003-question-side-effects.test.ts - question kind with edits -> STOP_QUESTION_SIDE_EFFECTS",
-    "4. Create tests/fixtures/F004-verify-only-side-effects.test.ts - verify_only with edits -> STOP_VERIFY_ONLY_SIDE_EFFECTS",
-    "5. Create tests/fixtures/F005-scope-outside-allowed.test.ts - edit outside allowed_globs -> STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED",
-    "6. Create tests/fixtures/F006-forbidden-path.test.ts - edit forbidden path -> STOP_RUNNER_OWNED_MUTATION",
-    "7. Create test helpers/mocks for simulating runner states"
+    "1. Create tests/fixtures/F007-new-file-rejected.test.ts - allow_new_files=false -> STOP_SCOPE_VIOLATION_NEW_FILE",
+    "2. Create tests/fixtures/F008-lockfile-change-rejected.test.ts - lockfile change -> STOP_LOCKFILE_CHANGE_FORBIDDEN",
+    "3. Create tests/fixtures/F009-diff-too-large.test.ts - max_lines_changed exceeded -> STOP_DIFF_TOO_LARGE",
+    "4. Create tests/fixtures/F010-verify-taint-rejected.test.ts - metachar in param -> STOP_VERIFY_TAINTED",
+    "5. Create tests/fixtures/F011-verify-fast-fail.test.ts - fast verify fails -> STOP_VERIFY_FAILED_FAST, slow not run",
+    "6. Create tests/fixtures/F012-crash-recovery.test.ts - corrupt state -> BLOCKED_CRASH_RECOVERY_REQUIRED"
   ],
 
   "implementation": {
     "fixtures": {
-      "F001": "one_tick_limits - verify call counts are bounded",
-      "F002": "orchestrator_invalid_json_blocks - invalid JSON blocks execution",
-      "F003": "question_no_side_effects - question tasks reject side effects",
-      "F004": "verify_only_no_side_effects - verify_only tasks reject side effects",
-      "F005": "scope_violation_outside_allowed - out-of-scope paths detected",
-      "F006": "forbidden_path_violation - runner-owned paths protected"
+      "F007": "new_file_rejected - allow_new_files=false blocks new files",
+      "F008": "lockfile_change_rejected - lockfile changes blocked when not allowed",
+      "F009": "diff_too_large - diff size limits enforced",
+      "F010": "verify_taint_rejected - metachar in params blocks verification",
+      "F011": "verify_fast_fail_stops - fast verification failure stops slow",
+      "F012": "crash_tmp_cleanup_blocks_if_invalid - crash recovery detection"
     },
-    "test_approach": "Unit test the individual lib functions that implement these behaviors"
+    "test_approach": "Unit test the individual lib functions (scope.ts, diff.ts, verify.ts, preflight.ts)"
   },
 
   "scope": {
-    "write": ["tests/fixtures/**/*.ts", "tests/helpers/**/*.ts"],
-    "create_under": ["tests/fixtures/", "tests/helpers/"],
+    "write": ["tests/fixtures/**/*.ts"],
+    "create_under": ["tests/fixtures/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "src/**"]
   },
 
   "acceptance": [
-    "All 6 fixture tests implemented",
+    "All 6 fixture tests (F007-F012) implemented",
     "Tests validate the expected STOP/BLOCKED codes",
-    "Tests for scope enforcement use actual scope checking functions",
-    "pnpm test passes with new fixture tests",
+    "Parameter validation tests use actual validateParam function",
+    "Diff limit tests use actual checkDiffLimits function",
+    "pnpm test passes with all fixture tests",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build", "pnpm test run"],
   "risk": "MED",
   "notes": [
-    "These are primarily unit tests of the lib functions",
-    "Full integration tests require mocking Claude Code CLI"
+    "This completes the V1 fixture test suite",
+    "F012 tests preflight crash detection logic"
   ]
 }
