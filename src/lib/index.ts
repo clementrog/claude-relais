@@ -10,3 +10,11 @@ export {
   cleanupTmpFiles,
   AtomicFsError,
 } from './fs.js';
+
+export {
+  loadConfig,
+  findConfigFile,
+  validateConfig,
+  ConfigError,
+  CONFIG_FILE_NAME,
+} from './config.js';
