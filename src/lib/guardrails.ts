@@ -371,3 +371,72 @@ export function classifyVerifyResult(
     shouldIncrementFailureStreak: true, // Default to true, caller can override based on config
   };
 }
+
+/**
+ * Merge eligibility result indicating whether a merge can proceed.
+ */
+export interface MergeEligibility {
+  /** Whether merge is eligible to proceed */
+  eligible: boolean;
+  /** List of reasons explaining eligibility status */
+  reasons: string[];
+}
+
+/**
+ * Report structure with git_diff_files field for merge eligibility checks.
+ */
+export interface MergeEligibilityReport {
+  /** List of files changed (from git diff --name-only main...HEAD) */
+  git_diff_files?: string[];
+}
+
+/**
+ * Checks if merge is eligible based on verification history, diff evidence, and worktree state.
+ *
+ * Merge eligibility requirements:
+ * - verify_history must contain at least one PASS result
+ * - git_diff_files must be non-empty (evidence of changes)
+ * - worktree must be clean (no uncommitted changes)
+ *
+ * @param state - Tick state containing verify_history
+ * @param report - Report containing git_diff_files array
+ * @returns MergeEligibility with eligible status and reasons
+ *
+ * @example
+ * ```typescript
+ * const eligibility = checkMergeEligibility(state, report);
+ * if (!eligibility.eligible) {
+ *   console.error(`Merge not eligible: ${eligibility.reasons.join(', ')}`);
+ * }
+ * ```
+ */
+export function checkMergeEligibility(
+  state: TickState,
+  report: MergeEligibilityReport
+): MergeEligibility {
+  const reasons: string[] = [];
+
+  // Check 1: verify_history must contain at least one PASS
+  const verifyHistory = state.verify_history ?? [];
+  const hasPass = verifyHistory.some((entry) => entry.result === 'PASS');
+  if (!hasPass) {
+    reasons.push('verify_history does not contain any PASS results');
+  }
+
+  // Check 2: git_diff_files must be non-empty
+  const gitDiffFiles = report.git_diff_files ?? [];
+  if (gitDiffFiles.length === 0) {
+    reasons.push('git_diff_files is empty (no evidence of changes)');
+  }
+
+  // Check 3: worktree must be clean
+  const worktreeResult = checkWorktreeClean();
+  if (!worktreeResult.ok) {
+    reasons.push(worktreeResult.reason || 'Git worktree has uncommitted changes');
+  }
+
+  return {
+    eligible: reasons.length === 0,
+    reasons: reasons.length > 0 ? reasons : ['All merge eligibility checks passed'],
+  };
+}

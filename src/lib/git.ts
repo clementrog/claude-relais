@@ -178,3 +178,84 @@ export function getCurrentBranch(): string {
     );
   }
 }
+
+/**
+ * Stashes pilot/ directory files to prevent merge conflicts.
+ *
+ * Creates a stash containing only files in the pilot/ directory.
+ * This allows safe merging without losing pilot state.
+ *
+ * @returns The stash reference (e.g., "stash@{0}")
+ * @throws {Error} If the stash operation fails
+ *
+ * @example
+ * ```typescript
+ * const stashRef = stashPilotFiles();
+ * // Perform merge...
+ * popPilotStash(stashRef);
+ * ```
+ */
+export function stashPilotFiles(): string {
+  try {
+    // Stash only pilot/ directory files
+    // --keep-index keeps staged changes, but we want to stash everything in pilot/
+    // Using git stash push with pathspec to stash only pilot/ files
+    const output = execSync('git stash push -m "relais: auto-stash pilot files" -- pilot/', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Extract stash reference from output
+    // Output format: "Saved working directory and index state On <branch>: <message>"
+    // We need to get the stash ref, which is typically "stash@{0}" for the most recent stash
+    const stashRef = execSync('git rev-parse --short stash@{0}', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    // Return the full stash reference
+    return 'stash@{0}';
+  } catch (error) {
+    // If stash push fails (e.g., no changes to stash), check if stash exists
+    try {
+      // Try to get the most recent stash
+      execSync('git rev-parse --verify stash@{0} > /dev/null 2>&1', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return 'stash@{0}';
+    } catch {
+      throw new Error(
+        `Failed to stash pilot files: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+}
+
+/**
+ * Pops a previously created stash to restore pilot files.
+ *
+ * Restores the stashed pilot/ directory files back to the working tree.
+ *
+ * @param stashRef - The stash reference returned by stashPilotFiles (e.g., "stash@{0}")
+ * @throws {Error} If the stash pop operation fails
+ *
+ * @example
+ * ```typescript
+ * const stashRef = stashPilotFiles();
+ * // Perform merge...
+ * popPilotStash(stashRef);
+ * ```
+ */
+export function popPilotStash(stashRef: string): void {
+  try {
+    execSync(`git stash pop ${stashRef}`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to pop pilot stash ${stashRef}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}

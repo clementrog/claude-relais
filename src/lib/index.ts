@@ -35,6 +35,8 @@ export {
   getDiffFiles,
   getUntrackedFiles,
   getCurrentBranch,
+  stashPilotFiles,
+  popPilotStash,
 } from './git.js';
 
 export { runPreflight } from './preflight.js';
@@ -167,9 +169,12 @@ export {
   runGuardrailPreflight,
   classifyVerifyResult,
   shouldEscalate,
+  checkMergeEligibility,
   type GuardrailState,
   type PreflightResult as GuardrailPreflightResult,
   type VerifyResultType,
   type VerifyClassification,
   type EscalationDecision,
+  type MergeEligibility,
+  type MergeEligibilityReport,
 } from './guardrails.js';
