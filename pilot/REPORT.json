@@ -1,86 +1,52 @@
 {
   "v": 3,
-  "mode": "batch",
-  "task": null,
+  "task": "WP-011",
   "status": "DONE",
-  "tasks_completed": ["WP-002", "WP-003", "WP-004", "WP-005"],
   "subtasks_completed": [
-    "Create /relais.config.json with full configuration as specified in PRD",
-    "Create relais/schemas/task.schema.json",
-    "Create relais/schemas/builder_result.schema.json",
-    "Create relais/schemas/report.schema.json",
-    "Create relais/prompts/orchestrator.system.txt",
-    "Create relais/prompts/orchestrator.user.txt",
-    "Create relais/prompts/builder.system.txt",
-    "Create relais/prompts/builder.user.txt",
-    "Create relais/STATE.json with initial empty state",
-    "Create relais/TASK.json placeholder",
-    "Create relais/REPORT.json placeholder",
-    "Create relais/BLOCKED.json placeholder",
-    "Create relais/FACTS.md placeholder",
-    "Create relais/fixtures/README.md with fixture list"
+    "Created src/types/state.ts with TickState, TickPhase, and TickContext types",
+    "Created src/types/report.ts with ReportData, Verdict, and ReportCode types",
+    "Created src/lib/state.ts with state management functions",
+    "Created src/runner/tick.ts with the main runTick() function implementing the state machine",
+    "Implemented phase transitions with proper error handling (LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END)",
+    "Wired up 'relais run' command to execute runTick()",
+    "Exported types and updated index files"
   ],
-  "git_diff_files": [],
+  "git_diff_files": [
+    "src/index.ts",
+    "src/lib/index.ts",
+    "src/lib/state.ts",
+    "src/runner/tick.ts",
+    "src/types/index.ts",
+    "src/types/report.ts",
+    "src/types/state.ts"
+  ],
   "files": {
-    "changed": [],
+    "changed": [
+      "src/index.ts",
+      "src/lib/index.ts",
+      "src/types/index.ts"
+    ],
     "created": [
-      "relais.config.json",
-      "relais/schemas/task.schema.json",
-      "relais/schemas/builder_result.schema.json",
-      "relais/schemas/report.schema.json",
-      "relais/prompts/orchestrator.system.txt",
-      "relais/prompts/orchestrator.user.txt",
-      "relais/prompts/builder.system.txt",
-      "relais/prompts/builder.user.txt",
-      "relais/STATE.json",
-      "relais/TASK.json",
-      "relais/REPORT.json",
-      "relais/BLOCKED.json",
-      "relais/FACTS.md",
-      "relais/fixtures/README.md"
+      "src/lib/state.ts",
+      "src/runner/tick.ts",
+      "src/types/report.ts",
+      "src/types/state.ts"
     ],
     "deleted": []
   },
-  "per_task": {
-    "WP-002": {
-      "files_created": ["relais.config.json"],
-      "status": "DONE"
-    },
-    "WP-003": {
-      "files_created": [
-        "relais/schemas/task.schema.json",
-        "relais/schemas/builder_result.schema.json",
-        "relais/schemas/report.schema.json"
-      ],
-      "status": "DONE"
-    },
-    "WP-004": {
-      "files_created": [
-        "relais/prompts/orchestrator.system.txt",
-        "relais/prompts/orchestrator.user.txt",
-        "relais/prompts/builder.system.txt",
-        "relais/prompts/builder.user.txt"
-      ],
-      "status": "DONE"
-    },
-    "WP-005": {
-      "files_created": [
-        "relais/STATE.json",
-        "relais/TASK.json",
-        "relais/REPORT.json",
-        "relais/BLOCKED.json",
-        "relais/FACTS.md",
-        "relais/fixtures/README.md"
-      ],
-      "status": "DONE"
+  "verify": [
+    {
+      "cmd": "pnpm build",
+      "exit": 0,
+      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc\n"
     }
-  },
-  "verify": [],
+  ],
   "notes": [
-    "All JSON files validated as syntactically correct",
-    "Schemas follow JSON Schema Draft 2020-12 specification",
-    "Config file uses proper JSON syntax (no backslash escapes from markdown)",
-    "Prompt templates contain placeholders (e.g., {{PROJECT_GOAL}}) for runner interpolation"
+    "ORCHESTRATE, BUILD, and JUDGE phases are placeholders (console.log) as specified - full implementation in M3, M4, M5",
+    "Lock is acquired at start (LOCK phase) and released at end (END phase)",
+    "Preflight is executed and blocks if checks fail",
+    "Report generation writes both REPORT.json and REPORT.md",
+    "State machine properly handles errors and ensures lock is always released"
   ],
   "blockers": []
 }

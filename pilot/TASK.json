@@ -1,30 +1,103 @@
 {
   "v": 5,
-  "id": null,
-  "milestone": null,
-  "goal": null,
+  "id": "WP-011",
+  "milestone": "M2",
+  "goal": "Implement the tick state machine (core runner loop)",
 
   "context": {
-    "why": null,
-    "deps": [],
-    "extract": null,
-    "skills": []
+    "why": "The state machine is the heart of relais. One 'relais run' executes one tick through phases: LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END",
+    "deps": ["WP-010", "WP-012", "WP-013", "WP-014"],
+    "extract": "From PRD Section 7: States: 1) LOCK, 2) PREFLIGHT, 3) ORCHESTRATE, 4) BUILD, 5) JUDGE, 6) REPORT, 7) END. Hard attempt limits: Orchestrator calls: 1 (+ optional 1 retry if invalid JSON). Builder calls: 1. No other retries."
   },
 
-  "phases": [],
+  "subtasks": [
+    "1. Create src/types/state.ts with TickState, TickPhase, and TickContext types",
+    "2. Create src/types/report.ts with ReportData, Verdict, and ReportCode types",
+    "3. Create src/lib/state.ts with state management functions",
+    "4. Create src/runner/tick.ts with the main runTick() function",
+    "5. Implement phase transitions with proper error handling",
+    "6. Wire up 'relais run' command to execute runTick()",
+    "7. Export types and update index files"
+  ],
 
-  "implementation": {},
+  "implementation": {
+    "TickPhase": {
+      "type": "enum",
+      "values": ["LOCK", "PREFLIGHT", "ORCHESTRATE", "BUILD", "JUDGE", "REPORT", "END"]
+    },
+    "TickState": {
+      "phase": "TickPhase",
+      "run_id": "string - unique ID for this tick",
+      "started_at": "string - ISO timestamp",
+      "base_commit": "string - git HEAD at start",
+      "config": "RelaisConfig",
+      "task": "Task | null - from orchestrator",
+      "builder_result": "BuilderResult | null",
+      "errors": "string[]"
+    },
+    "runTick": {
+      "signature": "async function runTick(config: RelaisConfig): Promise<ReportData>",
+      "phases": [
+        {
+          "name": "LOCK",
+          "action": "acquireLock(config.runner.lockfile)",
+          "on_error": "return BLOCKED_LOCK_HELD"
+        },
+        {
+          "name": "PREFLIGHT",
+          "action": "runPreflight(config)",
+          "on_error": "releaseLock, return BLOCKED_*"
+        },
+        {
+          "name": "ORCHESTRATE",
+          "action": "placeholder - log 'orchestrate not implemented'",
+          "note": "Full implementation in M3"
+        },
+        {
+          "name": "BUILD",
+          "action": "placeholder - log 'build not implemented'",
+          "note": "Full implementation in M4"
+        },
+        {
+          "name": "JUDGE",
+          "action": "placeholder - log 'judge not implemented'",
+          "note": "Full implementation in M5"
+        },
+        {
+          "name": "REPORT",
+          "action": "generateReport(state) - writes REPORT.json and REPORT.md",
+          "note": "Full implementation in M6, basic skeleton now"
+        },
+        {
+          "name": "END",
+          "action": "releaseLock(), return report"
+        }
+      ]
+    }
+  },
 
   "scope": {
-    "write": [],
-    "create_under": [],
-    "delete": [],
-    "read_forbidden": [".env*", "*.pem", "*.key", "*.secret"],
-    "forbidden": ["package.json", "*.lock", "pilot/*"]
+    "write": ["src/index.ts"],
+    "create_under": ["src/types", "src/lib", "src/runner"],
+    "read_forbidden": [".env*", "*.pem", "*.key"],
+    "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
-  "acceptance": [],
-  "verify": [],
-  "risk": "LOW",
-  "notes": []
+  "acceptance": [
+    "src/types/state.ts exists with TickState and TickPhase",
+    "src/types/report.ts exists with ReportData, Verdict, ReportCode",
+    "src/runner/tick.ts exists with runTick function",
+    "'relais run' executes the tick and logs phase transitions",
+    "Lock is acquired at start and released at end",
+    "Preflight is executed and blocks if checks fail",
+    "pnpm build succeeds"
+  ],
+
+  "verify": ["pnpm build"],
+  "risk": "MED",
+  "notes": [
+    "ORCHESTRATE, BUILD, JUDGE are placeholders for now (console.log)",
+    "Focus on the state machine structure and phase transitions",
+    "Use existing utilities: acquireLock, releaseLock, runPreflight, atomicWriteJson"
+  ]
 }

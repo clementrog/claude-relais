@@ -54,13 +54,28 @@ program
   .action(async () => {
     try {
       const config = await loadConfig(globalConfigPath);
-      console.log(`relais run (${config.product_name}) - not yet implemented`);
+      const { runTick } = await import('./runner/tick.js');
+      const report = await runTick(config);
+      
+      // Print summary
+      console.log(`\n--- Tick Complete ---`);
+      console.log(`Run ID: ${report.run_id}`);
+      console.log(`Verdict: ${report.verdict}`);
+      console.log(`Code: ${report.code}`);
+      console.log(`Duration: ${report.duration_ms}ms`);
+      
+      if (report.verdict === 'blocked') {
+        process.exit(1);
+      } else if (report.verdict === 'stop') {
+        process.exit(1);
+      }
     } catch (error) {
       if (error instanceof ConfigError) {
         console.error(`Configuration error: ${error.message}`);
         process.exit(1);
       }
-      throw error;
+      console.error(`Fatal error during tick execution:`, error);
+      process.exit(1);
     }
   });
 

@@ -37,3 +37,12 @@ export {
 } from './git.js';
 
 export { runPreflight } from './preflight.js';
+
+export {
+  generateRunId,
+  createInitialState,
+  transitionPhase,
+  addError,
+  setTask,
+  setBuilderResult,
+} from './state.js';
