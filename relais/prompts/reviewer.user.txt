@@ -1,0 +1,35 @@
+Review this builder output and decide: proceed, force_patch, or ask_question.
+
+Return ONLY reviewer_result JSON matching reviewer_result.schema.json. Nothing else.
+
+=== RISK FLAGS ===
+
+{{RISK_FLAGS}}
+
+=== TASK ===
+
+{{TASK_JSON}}
+
+=== LAST REPORT ===
+
+{{LAST_REPORT_MD}}
+
+=== DIFF PATCH ===
+
+{{DIFF_PATCH_OR_EMPTY}}
+
+=== VERIFY LOG EXCERPT ===
+
+{{VERIFY_LOG_EXCERPT_OR_EMPTY}}
+
+=== TOUCHED PATHS ===
+
+{{TOUCHED_PATHS}}
+
+=== YOUR DECISION ===
+
+Review the above and output your decision:
+
+- proceed: Changes are safe and acceptable
+- force_patch: Changes need correction (provide patch_hint)
+- ask_question: Need human clarification (provide question object)

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relais.local/schemas/reviewer_result.schema.json",
+  "title": "Relais Reviewer Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision", "reason_short"],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["proceed", "force_patch", "ask_question"]
+    },
+    "reason_short": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "risk_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "minItems": 0,
+      "maxItems": 20
+    },
+    "patch_hint": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt"],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "minItems": 0,
+          "maxItems": 12
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "ask_question"
+          }
+        }
+      },
+      "then": {
+        "required": ["question"]
+      }
+    }
+  ]
+}
