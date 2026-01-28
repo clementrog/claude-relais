@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M7",
+  "current": "M8",
   "milestones": [
     {
       "id": "M1",
@@ -87,7 +87,7 @@
     {
       "id": "M7",
       "title": "Testing & Fixtures",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
         "WP-060: Test framework setup (vitest)",

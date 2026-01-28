@@ -1,56 +1,52 @@
 {
   "v": 5,
-  "id": "WP-062",
-  "milestone": "M7",
-  "goal": "Implement fixture tests F007-F012 for remaining runner behaviors",
+  "id": "WP-070",
+  "milestone": "M8",
+  "goal": "Add reviewer config types to src/types/config.ts",
 
   "context": {
-    "why": "Complete the fixture test suite with tests for new file restrictions, lockfile changes, diff limits, verification taint, fast-fail behavior, and crash recovery. These are the final tests for V1.",
-    "deps": ["WP-061"],
-    "extract": "From PRD: F007 new_file_rejected, F008 lockfile_change_rejected, F009 diff_too_large, F010 verify_taint_rejected, F011 verify_fast_fail_stops, F012 crash_tmp_cleanup_blocks_if_invalid."
+    "why": "Implement the foundation for Review Escalation feature (Appendix C). The reviewer section in relais.config.json controls Codex CLI integration for a 'Second Brain' reviewer that triggers on risky situations.",
+    "deps": ["WP-062"],
+    "extract": "From PRD Appendix C2: reviewer config with enabled, engine, command, model, max_turns, max_budget_usd, auth (mode, ci_requires_api_key, api_key_env), trigger (on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold), schema_file, system_prompt_file, user_prompt_file."
   },
 
   "subtasks": [
-    "1. Create tests/fixtures/F007-new-file-rejected.test.ts - allow_new_files=false -> STOP_SCOPE_VIOLATION_NEW_FILE",
-    "2. Create tests/fixtures/F008-lockfile-change-rejected.test.ts - lockfile change -> STOP_LOCKFILE_CHANGE_FORBIDDEN",
-    "3. Create tests/fixtures/F009-diff-too-large.test.ts - max_lines_changed exceeded -> STOP_DIFF_TOO_LARGE",
-    "4. Create tests/fixtures/F010-verify-taint-rejected.test.ts - metachar in param -> STOP_VERIFY_TAINTED",
-    "5. Create tests/fixtures/F011-verify-fast-fail.test.ts - fast verify fails -> STOP_VERIFY_FAILED_FAST, slow not run",
-    "6. Create tests/fixtures/F012-crash-recovery.test.ts - corrupt state -> BLOCKED_CRASH_RECOVERY_REQUIRED"
+    "1. Add ReviewerAuthConfig interface (mode: 'auto'|'api_key'|'login', ci_requires_api_key, api_key_env)",
+    "2. Add ReviewerTriggerConfig interface (on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold)",
+    "3. Add ReviewerConfig interface (enabled, engine, command, model, max_turns, max_budget_usd, auth, trigger, schema_file, system_prompt_file, user_prompt_file)",
+    "4. Add optional reviewer field to RelaisConfig interface",
+    "5. Export new types from src/types/index.ts"
   ],
 
   "implementation": {
-    "fixtures": {
-      "F007": "new_file_rejected - allow_new_files=false blocks new files",
-      "F008": "lockfile_change_rejected - lockfile changes blocked when not allowed",
-      "F009": "diff_too_large - diff size limits enforced",
-      "F010": "verify_taint_rejected - metachar in params blocks verification",
-      "F011": "verify_fast_fail_stops - fast verification failure stops slow",
-      "F012": "crash_tmp_cleanup_blocks_if_invalid - crash recovery detection"
+    "interfaces": {
+      "ReviewerAuthConfig": "mode, ci_requires_api_key, api_key_env",
+      "ReviewerTriggerConfig": "on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold",
+      "ReviewerConfig": "enabled, engine, command, model, max_turns, max_budget_usd, auth, trigger, schema_file, system_prompt_file, user_prompt_file"
     },
-    "test_approach": "Unit test the individual lib functions (scope.ts, diff.ts, verify.ts, preflight.ts)"
+    "notes": "reviewer is optional in RelaisConfig (feature can be disabled)"
   },
 
   "scope": {
-    "write": ["tests/fixtures/**/*.ts"],
-    "create_under": ["tests/fixtures/"],
+    "write": ["src/types/config.ts", "src/types/index.ts"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "src/**"]
+    "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "All 6 fixture tests (F007-F012) implemented",
-    "Tests validate the expected STOP/BLOCKED codes",
-    "Parameter validation tests use actual validateParam function",
-    "Diff limit tests use actual checkDiffLimits function",
-    "pnpm test passes with all fixture tests",
+    "ReviewerAuthConfig interface defined with mode, ci_requires_api_key, api_key_env",
+    "ReviewerTriggerConfig interface defined with all 7 trigger fields",
+    "ReviewerConfig interface defined with all fields from C2",
+    "RelaisConfig has optional reviewer?: ReviewerConfig field",
+    "New types exported from index.ts",
     "pnpm build succeeds"
   ],
 
-  "verify": ["pnpm build", "pnpm test run"],
-  "risk": "MED",
+  "verify": ["pnpm build"],
+  "risk": "LOW",
   "notes": [
-    "This completes the V1 fixture test suite",
-    "F012 tests preflight crash detection logic"
+    "This is the foundation task - types only, no implementation",
+    "Follow existing code style in config.ts (JSDoc comments on interfaces)"
   ]
 }
