@@ -20,6 +20,7 @@ import {
   addError,
 } from '../lib/state.js';
 import { runOrchestrator } from './orchestrator.js';
+import { runBuilder } from './builder.js';
 
 /**
  * Generates a basic report from tick state.
@@ -221,11 +222,67 @@ export async function runTick(config: RelaisConfig): Promise<ReportData> {
     };
     console.log(`[${TickPhase.ORCHESTRATE}] Task proposed: ${orchestratorResult.task.task_id} (${orchestratorResult.task.task_kind})`);
 
-    // Phase 4: BUILD (placeholder)
-    console.log(`[${TickPhase.BUILD}] Build phase (not yet implemented)`);
+    // Phase 4: BUILD
+    console.log(`[${TickPhase.BUILD}] Running builder...`);
     state = transitionPhase(state, TickPhase.BUILD);
-    // Placeholder: Full implementation in M4
-    console.log(`[${TickPhase.BUILD}] Build not implemented - skipping`);
+    
+    if (!state.task) {
+      // This should not happen, but handle gracefully
+      if (lockAcquired) {
+        await releaseLock(lockPath);
+        lockAcquired = false;
+      }
+
+      const report = generateReport(
+        {
+          ...state,
+          errors: ['No task available for builder'],
+        },
+        'STOP_INTERRUPTED',
+        'stop'
+      );
+      return report;
+    }
+
+    const builderResult = await runBuilder(state, state.task);
+    
+    if (!builderResult.success) {
+      // Builder invocation failed - release lock and return stopped report
+      if (lockAcquired) {
+        await releaseLock(lockPath);
+        lockAcquired = false;
+      }
+
+      // Use STOP_BUILDER_OUTPUT_INVALID if output was invalid, otherwise STOP_INTERRUPTED
+      const reportCode = !builderResult.builderOutputValid && builderResult.rawResponse
+        ? 'STOP_BUILDER_OUTPUT_INVALID'
+        : 'STOP_INTERRUPTED';
+
+      const report = generateReport(
+        {
+          ...state,
+          builder_result: builderResult.result,
+          errors: builderResult.rawResponse
+            ? [`Builder invocation failed: ${builderResult.rawResponse.substring(0, 200)}`]
+            : ['Builder invocation failed'],
+        },
+        reportCode,
+        'stop'
+      );
+      return report;
+    }
+
+    // Update state with builder result
+    state = {
+      ...state,
+      builder_result: builderResult.result,
+    };
+    
+    if (builderResult.builderOutputValid) {
+      console.log(`[${TickPhase.BUILD}] Builder completed successfully`);
+    } else {
+      console.log(`[${TickPhase.BUILD}] Builder completed but output was invalid JSON (lenient mode)`);
+    }
 
     // Phase 5: JUDGE (placeholder)
     console.log(`[${TickPhase.JUDGE}] Judge phase (not yet implemented)`);

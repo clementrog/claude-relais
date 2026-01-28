@@ -7,6 +7,7 @@
 
 import type { RelaisConfig } from './config.js';
 import type { Task } from './task.js';
+import type { BuilderResult } from './builder.js';
 
 /**
  * Phases of the tick state machine.
@@ -19,16 +20,6 @@ export enum TickPhase {
   JUDGE = 'JUDGE',
   REPORT = 'REPORT',
   END = 'END',
-}
-
-/**
- * Builder result structure (placeholder - full type will be defined later).
- */
-export interface BuilderResult {
-  summary: string;
-  files_intended: string[];
-  commands_ran: string[];
-  notes: string[];
 }
 
 /**

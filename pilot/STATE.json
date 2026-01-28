@@ -1,13 +1,13 @@
 {
   "v": 3,
-  "phase": "IDLE",
-  "mode": null,
-  "task": null,
+  "phase": "DISPATCH",
+  "mode": "single",
+  "task": "WP-030",
   "milestone": "M4",
-  "branch": "main",
+  "branch": "task/wp-030-builder",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
-  "next": "PLAN",
-  "ts": "2026-01-28T11:50:00Z"
+  "next": "BUILD",
+  "ts": "2026-01-28T12:00:00Z"
 }

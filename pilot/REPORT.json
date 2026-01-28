@@ -1,36 +1,39 @@
 {
   "v": 3,
-  "task": "WP-022",
+  "task": "WP-030",
   "status": "DONE",
   "subtasks_completed": [
-    "Installed ajv as a dependency",
-    "Created src/lib/schema.ts with loadSchema and validateWithSchema functions",
-    "Updated orchestrator.ts to use Ajv validation instead of basic validation",
-    "Exported schema functions from src/lib/index.ts",
-    "Verified with pnpm install and pnpm build"
+    "1. Created src/types/builder.ts with BuilderResult interface matching builder_result.schema.json",
+    "2. Created src/runner/builder.ts with runBuilder function",
+    "3. Implemented buildBuilderPrompt() to construct the user prompt from Task",
+    "4. Load builder prompt templates from relais/prompts/",
+    "5. Invoke Claude Code with bypassPermissions mode and allowedTools",
+    "6. Parse builder output (flexible - may not be valid JSON)",
+    "7. Wired into tick.ts BUILD phase",
+    "8. Exported from index files"
   ],
   "git_diff_files": [
-    "src/lib/index.ts",
-    "src/lib/schema.ts",
-    "src/runner/orchestrator.ts"
+    "src/runner/builder.ts",
+    "src/runner/index.ts",
+    "src/runner/tick.ts",
+    "src/types/builder.ts",
+    "src/types/index.ts",
+    "src/types/state.ts"
   ],
   "files": {
     "changed": [
-      "src/lib/index.ts",
-      "src/lib/schema.ts",
-      "src/runner/orchestrator.ts"
+      "src/runner/index.ts",
+      "src/runner/tick.ts",
+      "src/types/index.ts",
+      "src/types/state.ts"
     ],
     "created": [
-      "src/lib/schema.ts"
+      "src/runner/builder.ts",
+      "src/types/builder.ts"
     ],
     "deleted": []
   },
   "verify": [
-    {
-      "cmd": "pnpm install",
-      "exit": 0,
-      "output": "Lockfile is up to date, resolution step is skipped\nAlready up to date\n\n╭ Warning ─────────────────────────────────────────────────────────────────────╮\n│                                                                              │\n│   Ignored build scripts: esbuild.                                            │\n│   Run \"pnpm approve-builds\" to pick which dependencies should be allowed     │\n│   to run scripts.                                                            │\n│                                                                              │\n╰──────────────────────────────────────────────────────────────────────────────╯\n\nDone in 169ms using pnpm v10.24.0"
-    },
     {
       "cmd": "pnpm build",
       "exit": 0,
@@ -38,9 +41,10 @@
     }
   ],
   "notes": [
-    "Used type assertion for Ajv import due to NodeNext module resolution in TypeScript",
-    "Schema caching implemented for performance",
-    "Validation errors are collected and returned as detailed error messages"
+    "Builder implementation uses bypassPermissions mode with restricted allowedTools (Read,Edit,Glob,Grep,Bash)",
+    "Builder output parsing is lenient by default (strict_builder_json=false), allowing invalid JSON without failure",
+    "Builder prompts are loaded from relais/prompts/ directory as configured",
+    "Builder is properly wired into tick.ts BUILD phase and exports are in place"
   ],
   "blockers": []
 }

@@ -36,8 +36,9 @@ export {
 export type {
   TickState,
   TickContext,
-  BuilderResult,
 } from './state.js';
+
+export type { BuilderResult } from './builder.js';
 
 export type {
   Task,
