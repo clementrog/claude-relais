@@ -1,52 +1,54 @@
 {
   "v": 5,
-  "id": "WP-070",
+  "id": "WP-071",
   "milestone": "M8",
-  "goal": "Add reviewer config types to src/types/config.ts",
+  "goal": "Implement Codex CLI wrapper for reviewer invocation",
 
   "context": {
-    "why": "Implement the foundation for Review Escalation feature (Appendix C). The reviewer section in relais.config.json controls Codex CLI integration for a 'Second Brain' reviewer that triggers on risky situations.",
-    "deps": ["WP-062"],
-    "extract": "From PRD Appendix C2: reviewer config with enabled, engine, command, model, max_turns, max_budget_usd, auth (mode, ci_requires_api_key, api_key_env), trigger (on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold), schema_file, system_prompt_file, user_prompt_file."
+    "why": "The reviewer uses Codex CLI to call a 'Second Brain' model. This wrapper handles invocation, auth detection, output parsing, and graceful failure handling.",
+    "deps": ["WP-070"],
+    "extract": "From PRD Appendix C6: Codex CLI invocation with system+user prompts, output parsing (JSON wrapper with result string, or direct JSON), auth failure handling. If reviewer fails, append reviewer_error to report and degrade gracefully."
   },
 
   "subtasks": [
-    "1. Add ReviewerAuthConfig interface (mode: 'auto'|'api_key'|'login', ci_requires_api_key, api_key_env)",
-    "2. Add ReviewerTriggerConfig interface (on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold)",
-    "3. Add ReviewerConfig interface (enabled, engine, command, model, max_turns, max_budget_usd, auth, trigger, schema_file, system_prompt_file, user_prompt_file)",
-    "4. Add optional reviewer field to RelaisConfig interface",
-    "5. Export new types from src/types/index.ts"
+    "1. Create src/lib/reviewer.ts with CodexCliWrapper",
+    "2. Implement invokeReviewer(config, context) -> ReviewerResult | ReviewerError",
+    "3. Implement output parsing: try wrapper.result, then direct JSON, validate against schema",
+    "4. Implement auth detection: check CODEX_API_KEY env var presence",
+    "5. Add ReviewerResult and ReviewerError types to src/types/reviewer.ts",
+    "6. Export from src/lib/index.ts and src/types/index.ts"
   ],
 
   "implementation": {
-    "interfaces": {
-      "ReviewerAuthConfig": "mode, ci_requires_api_key, api_key_env",
-      "ReviewerTriggerConfig": "on_verify_fail, on_repeated_stop, stop_window_ticks, max_stops_in_window, on_high_risk_paths, high_risk_globs, diff_fraction_threshold",
-      "ReviewerConfig": "enabled, engine, command, model, max_turns, max_budget_usd, auth, trigger, schema_file, system_prompt_file, user_prompt_file"
+    "files": {
+      "src/lib/reviewer.ts": "invokeReviewer, parseReviewerOutput, checkReviewerAuth",
+      "src/types/reviewer.ts": "ReviewerResult, ReviewerError, ReviewerContext types"
     },
-    "notes": "reviewer is optional in RelaisConfig (feature can be disabled)"
+    "cli_contract": "codex -p <prompt> --model <model> --max-turns 1",
+    "output_parsing": "1) parse stdout as JSON, 2) if has .result string, parse that, 3) validate against reviewer_result schema"
   },
 
   "scope": {
-    "write": ["src/types/config.ts", "src/types/index.ts"],
-    "create_under": [],
+    "write": ["src/lib/reviewer.ts", "src/types/reviewer.ts", "src/lib/index.ts", "src/types/index.ts"],
+    "create_under": ["src/lib/", "src/types/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "ReviewerAuthConfig interface defined with mode, ci_requires_api_key, api_key_env",
-    "ReviewerTriggerConfig interface defined with all 7 trigger fields",
-    "ReviewerConfig interface defined with all fields from C2",
-    "RelaisConfig has optional reviewer?: ReviewerConfig field",
-    "New types exported from index.ts",
+    "invokeReviewer function implemented with spawn (shell:false)",
+    "Output parsing handles both wrapper.result and direct JSON",
+    "Auth check returns status based on CODEX_API_KEY presence",
+    "Graceful error handling returns ReviewerError on failure",
+    "Types exported correctly",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "LOW",
+  "risk": "MED",
   "notes": [
-    "This is the foundation task - types only, no implementation",
-    "Follow existing code style in config.ts (JSDoc comments on interfaces)"
+    "Similar pattern to src/lib/claude.ts but for Codex CLI",
+    "Reviewer is read-only, never modifies files",
+    "Auth check is best-effort (env var presence only for V1)"
   ]
 }

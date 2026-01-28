@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-070",
+  "task": "WP-071",
   "milestone": "M8",
-  "branch": "task/wp-070-reviewer-config-types",
+  "branch": "task/wp-071-codex-cli-wrapper",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T16:30:00Z"
+  "ts": "2026-01-28T16:35:00Z"
 }

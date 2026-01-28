@@ -119,3 +119,9 @@ export {
   buildBlockedData,
   writeBlocked,
 } from './blocked.js';
+
+export {
+  invokeReviewer,
+  parseReviewerOutput,
+  checkReviewerAuth,
+} from './reviewer.js';
