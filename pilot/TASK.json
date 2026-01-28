@@ -1,56 +1,64 @@
 {
   "v": 5,
-  "id": "WP-042",
+  "id": "WP-043",
   "milestone": "M5",
-  "goal": "Implement diff limits enforcement to check files_touched and lines_changed limits",
+  "goal": "Implement verification command execution using argv arrays (no shell)",
 
   "context": {
-    "why": "Judge must verify that diff size doesn't exceed task limits. If files_touched > max_files_touched OR lines_changed > max_lines_changed → STOP(diff_too_large).",
-    "deps": ["WP-040"],
-    "extract": "From PRD Section 10: Diff size exceeds limits (files_touched > max_files_touched OR lines_changed > max_lines_changed) → STOP(STOP_DIFF_TOO_LARGE). Blast radius summary: '<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new'."
+    "why": "Judge must execute verification commands safely without shell injection risk. Commands use argv arrays with spawn, not shell strings. Templates from config define cmd+args with optional parameter placeholders.",
+    "deps": ["WP-044"],
+    "extract": "From PRD Section 11: Verification commands are templates defined in config as cmd+args arrays. Must use argv/no-shell, spawn(cmd, [...args], {shell:false}). Timeouts from config (timeout_fast_seconds, timeout_slow_seconds)."
   },
 
   "subtasks": [
-    "1. Add checkDiffLimits function to src/lib/diff.ts",
-    "2. Create DiffLimitCheckResult interface with ok, violation details",
-    "3. Check files_touched against task.diff_limits.max_files_touched",
-    "4. Check lines_changed (added + deleted) against task.diff_limits.max_lines_changed",
-    "5. Create formatBlastRadius function to generate summary string",
-    "6. Export new functions from src/lib/index.ts"
+    "1. Create src/lib/verify.ts module for verification execution",
+    "2. Create VerificationRun interface with template_id, exit_code, stdout, stderr, duration_ms, success",
+    "3. Implement executeVerification(template, params, timeout): runs single verification",
+    "4. Use spawn with shell:false for security",
+    "5. Implement interpolateArgs(args, params): replace {{param}} placeholders",
+    "6. Handle timeouts using AbortController or setTimeout+kill",
+    "7. Create runVerifications(templates, task, config): runs fast then slow verifications",
+    "8. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "DiffLimitCheckResult_interface": {
-      "ok": "boolean - true if within limits",
-      "files_touched": "number - actual files touched",
-      "lines_changed": "number - actual lines changed (added + deleted)",
-      "max_files": "number - limit from task",
-      "max_lines": "number - limit from task",
-      "violation": "string | null - description if limits exceeded"
+    "VerificationRun_interface": {
+      "template_id": "string - ID of the verification template",
+      "exit_code": "number - process exit code",
+      "stdout": "string - captured stdout",
+      "stderr": "string - captured stderr",
+      "duration_ms": "number - execution time",
+      "success": "boolean - exit_code === 0"
     },
-    "blast_radius_format": "<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new",
-    "lines_changed_calc": "lines_added + lines_deleted"
+    "spawn_options": {
+      "shell": false,
+      "stdio": "['pipe', 'pipe', 'pipe']",
+      "timeout": "from config timeout_fast_seconds or timeout_slow_seconds"
+    },
+    "param_interpolation": "Replace {{param_name}} in args with validated param values"
   },
 
   "scope": {
-    "write": ["src/lib/diff.ts", "src/lib/index.ts"],
-    "create_under": [],
+    "write": ["src/lib/verify.ts", "src/lib/index.ts"],
+    "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "checkDiffLimits detects when files_touched exceeds max_files_touched",
-    "checkDiffLimits detects when lines_changed exceeds max_lines_changed",
-    "formatBlastRadius returns correct summary string format",
-    "Returns ok=true when within limits",
+    "executeVerification runs command using spawn with shell:false",
+    "Command timeouts are enforced",
+    "stdout/stderr are captured",
+    "Exit code is returned correctly",
+    "Parameter placeholders are interpolated in args",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "LOW",
+  "risk": "MED",
   "notes": [
-    "Uses DiffAnalysis from WP-040 as input",
-    "DiffLimits type from task.diff_limits"
+    "WP-044 implements parameter validation (metachar rejection) - this task assumes params are already validated",
+    "Templates come from config.verification.templates",
+    "Fast verifications run first, then slow verifications"
   ]
 }

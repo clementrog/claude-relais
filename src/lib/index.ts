@@ -80,3 +80,10 @@ export {
   type ScopeCheckResult,
   type ScopeViolation,
 } from './scope.js';
+
+export {
+  interpolateArgs,
+  executeVerification,
+  runVerifications,
+  type VerificationRun,
+} from './verify.js';

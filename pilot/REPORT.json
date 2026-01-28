@@ -1,17 +1,21 @@
 {
   "v": 3,
-  "task": "WP-042",
+  "task": "WP-043",
   "status": "DONE",
   "subtasks_completed": [
-    "Added DiffLimitCheckResult interface to src/lib/diff.ts",
-    "Created checkDiffLimits function that checks files_touched and lines_changed against task limits",
-    "Created formatBlastRadius function to generate summary string in format '<files_touched> files, +<lines_added>/-<lines_deleted>, <new_files> new'",
-    "Exported checkDiffLimits, formatBlastRadius, and DiffLimitCheckResult from src/lib/index.ts"
+    "1. Created src/lib/verify.ts module for verification execution",
+    "2. Created VerificationRun interface with template_id, exit_code, stdout, stderr, duration_ms, success",
+    "3. Implemented executeVerification(template, params, timeout): runs single verification",
+    "4. Used spawn with shell:false for security",
+    "5. Implemented interpolateArgs(args, params): replace {{param}} placeholders",
+    "6. Handled timeouts using setTimeout+kill (SIGTERM then SIGKILL)",
+    "7. Created runVerifications(templates, task, config): runs fast then slow verifications",
+    "8. Exported from src/lib/index.ts"
   ],
-  "git_diff_files": ["src/lib/diff.ts", "src/lib/index.ts"],
+  "git_diff_files": ["src/lib/index.ts", "src/lib/verify.ts"],
   "files": {
-    "changed": ["src/lib/diff.ts", "src/lib/index.ts"],
-    "created": [],
+    "changed": ["src/lib/index.ts"],
+    "created": ["src/lib/verify.ts"],
     "deleted": []
   },
   "verify": [
@@ -21,6 +25,12 @@
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [],
+  "notes": [
+    "VerificationRun interface includes stdout/stderr capture as specified in task",
+    "Timeout handling uses SIGTERM followed by SIGKILL after 1s grace period",
+    "Parameter interpolation supports {{param_name}} syntax",
+    "runVerifications expects templates as Map<string, VerificationTemplate> for efficient lookup",
+    "All verification commands use shell:false for security (no shell injection risk)"
+  ],
   "blockers": []
 }

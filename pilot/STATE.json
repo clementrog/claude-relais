@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-042",
+  "task": "WP-043",
   "milestone": "M5",
-  "branch": "task/wp-042-diff-limits",
+  "branch": "task/wp-043-verify-exec",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T12:50:00Z"
+  "ts": "2026-01-28T13:00:00Z"
 }
