@@ -23,6 +23,30 @@ export enum TickPhase {
 }
 
 /**
+ * Stop history entry representing a single stop event.
+ */
+export interface StopHistoryEntry {
+  /** Run ID when the stop occurred */
+  run_id: string;
+  /** Stop code/reason */
+  code: string;
+  /** ISO timestamp when the stop occurred */
+  at: string;
+}
+
+/**
+ * Guardrail state tracking escalation and risk flags.
+ */
+export interface GuardrailState {
+  /** Force patch mode until success (escalation flag) */
+  force_patch_until_success: boolean;
+  /** Last risk flags that triggered reviewer */
+  last_risk_flags: string[];
+  /** History of stop events (capped to 50 entries) */
+  stop_history: StopHistoryEntry[];
+}
+
+/**
  * Complete state of a tick execution.
  */
 export interface TickState {
@@ -42,6 +66,8 @@ export interface TickState {
   builder_result: BuilderResult | null;
   /** Accumulated errors during execution */
   errors: string[];
+  /** Guardrail state (optional - absent means no escalation state) */
+  guardrail?: GuardrailState;
 }
 
 /**
