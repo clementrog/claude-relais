@@ -1,58 +1,57 @@
 {
   "v": 5,
-  "id": "WP-081",
+  "id": "WP-082",
   "milestone": "M9",
-  "goal": "Add new guardrail STOP codes",
+  "goal": "Add guardrail fields to STATE.json types",
 
   "context": {
-    "why": "Guardrails require new STOP codes for loop detection, timeout classification, and merge safety.",
-    "deps": ["WP-080"],
-    "extract": "From Guardrails spec: STOP_REDISPATCH_IDENTICAL_TASK (same fingerprint after failure), STOP_VERIFY_FLAKY_OR_TIMEOUT (verify timeout/flaky), STOP_MERGE_DIRTY_WORKTREE (dirty worktree at merge), STOP_BRANCH_MISMATCH (wrong branch), STOP_EVIDENCE_INCOMPLETE (missing evidence for MED/HIGH)."
+    "why": "STATE.json needs to track task fingerprints, failure streaks, verify history, and escalation state for guardrail enforcement.",
+    "deps": ["WP-081"],
+    "extract": "From Guardrails spec: task_fingerprint (current), last_failed_fingerprint, failure_streak (int), verify_history (array of {ts, task, result, cmd, ms}), escalation (mode, reason, window_ticks, max_stops_in_window)."
   },
 
   "subtasks": [
-    "1. Add STOP_REDISPATCH_IDENTICAL_TASK to StopCode in src/types/report.ts",
-    "2. Add STOP_VERIFY_FLAKY_OR_TIMEOUT to StopCode",
-    "3. Add STOP_MERGE_DIRTY_WORKTREE to StopCode",
-    "4. Add STOP_BRANCH_MISMATCH to StopCode",
-    "5. Add STOP_EVIDENCE_INCOMPLETE to StopCode",
-    "6. Update relais/schemas/report.schema.json with new codes"
+    "1. Add VerifyHistoryEntry interface to src/types/state.ts",
+    "2. Add EscalationState interface (mode, reason, window_ticks, max_stops_in_window)",
+    "3. Add task_fingerprint, last_failed_fingerprint, failure_streak fields to StateData",
+    "4. Add verify_history and escalation fields to StateData",
+    "5. Add helper functions for updating fingerprint and failure_streak",
+    "6. Export types from src/types/index.ts"
   ],
 
   "implementation": {
-    "new_codes": [
-      "STOP_REDISPATCH_IDENTICAL_TASK",
-      "STOP_VERIFY_FLAKY_OR_TIMEOUT",
-      "STOP_MERGE_DIRTY_WORKTREE",
-      "STOP_BRANCH_MISMATCH",
-      "STOP_EVIDENCE_INCOMPLETE"
-    ],
-    "meanings": {
-      "STOP_REDISPATCH_IDENTICAL_TASK": "Next TASK fingerprint equals last failed fingerprint",
-      "STOP_VERIFY_FLAKY_OR_TIMEOUT": "Verify command timed out or classified as flaky",
-      "STOP_MERGE_DIRTY_WORKTREE": "Worktree not clean when attempting merge",
-      "STOP_BRANCH_MISMATCH": "Current branch doesn't match STATE.branch",
-      "STOP_EVIDENCE_INCOMPLETE": "MED/HIGH task missing required evidence in REPORT"
+    "types": {
+      "VerifyHistoryEntry": "{ ts: string, task: string, result: 'PASS'|'FAIL'|'TIMEOUT', cmd: string, ms: number }",
+      "EscalationState": "{ mode: 'none'|'reviewer'|'human', reason: string, window_ticks: number, max_stops_in_window: number }"
+    },
+    "state_fields": {
+      "task_fingerprint": "Current TASK fingerprint (sha256)",
+      "last_failed_fingerprint": "Fingerprint of last failed task",
+      "failure_streak": "Consecutive failures count",
+      "verify_history": "Last N verify results",
+      "escalation": "Current escalation state"
     }
   },
 
   "scope": {
-    "write": ["src/types/report.ts", "relais/schemas/report.schema.json"],
+    "write": ["src/types/state.ts", "src/lib/state.ts", "src/types/index.ts", "src/lib/index.ts"],
     "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "src/lib/**", "tests/**"]
+    "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "All 5 new STOP codes added to StopCode type",
-    "report.schema.json enum updated with new codes",
+    "VerifyHistoryEntry and EscalationState interfaces defined",
+    "StateData has fingerprint and failure tracking fields",
+    "Helper functions for fingerprint/failure management",
+    "verify_history capped to last 50 entries",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "Type-only changes, no implementation logic yet",
-    "Implementation will come in subsequent tasks"
+    "Extends existing GuardrailState from WP-075",
+    "All new fields are optional for backwards compatibility"
   ]
 }

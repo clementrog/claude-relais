@@ -7,7 +7,12 @@
 import { randomBytes } from 'node:crypto';
 import type { RelaisConfig } from '../types/config.js';
 import { TickPhase } from '../types/state.js';
-import type { TickState, GuardrailState, StopHistoryEntry } from '../types/state.js';
+import type {
+  TickState,
+  GuardrailState,
+  StopHistoryEntry,
+  VerifyHistoryEntry,
+} from '../types/state.js';
 
 /**
  * Generates a unique run ID for a tick.
@@ -170,5 +175,76 @@ export function setForcePatch(state: TickState): TickState {
       ...guardrail,
       force_patch_until_success: true,
     },
+  };
+}
+
+/**
+ * Updates the task fingerprint in tick state.
+ *
+ * @param state - Current tick state
+ * @param fingerprint - SHA256 fingerprint of the current task
+ * @returns Updated tick state
+ */
+export function updateTaskFingerprint(
+  state: TickState,
+  fingerprint: string
+): TickState {
+  return {
+    ...state,
+    task_fingerprint: fingerprint,
+  };
+}
+
+/**
+ * Updates failure tracking when a task fails.
+ *
+ * Increments failure_streak and updates last_failed_fingerprint.
+ *
+ * @param state - Current tick state
+ * @param fingerprint - SHA256 fingerprint of the failed task
+ * @returns Updated tick state
+ */
+export function recordTaskFailure(
+  state: TickState,
+  fingerprint: string
+): TickState {
+  return {
+    ...state,
+    last_failed_fingerprint: fingerprint,
+    failure_streak: (state.failure_streak ?? 0) + 1,
+  };
+}
+
+/**
+ * Resets failure streak when a task succeeds.
+ *
+ * @param state - Current tick state
+ * @returns Updated tick state
+ */
+export function resetFailureStreak(state: TickState): TickState {
+  return {
+    ...state,
+    failure_streak: 0,
+  };
+}
+
+/**
+ * Appends a verify history entry, capping at 50 entries.
+ *
+ * @param state - Current tick state
+ * @param entry - Verify history entry to add
+ * @returns Updated tick state
+ */
+export function appendVerifyHistory(
+  state: TickState,
+  entry: VerifyHistoryEntry
+): TickState {
+  const currentHistory = state.verify_history ?? [];
+  // Add entry and cap to 50 entries (keep most recent)
+  const updatedHistory = [...currentHistory, entry].slice(-50);
+
+  return {
+    ...state,
+    verify_history: updatedHistory,
   };
 }
