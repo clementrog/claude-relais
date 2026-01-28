@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-072",
+  "task": "WP-073",
   "milestone": "M8",
-  "branch": "task/wp-072-reviewer-schema-prompts",
+  "branch": "task/wp-073-risk-scoring",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T16:40:00Z"
+  "ts": "2026-01-28T16:45:00Z"
 }

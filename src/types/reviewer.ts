@@ -62,3 +62,15 @@ export interface ReviewerError {
  * Union type for reviewer invocation result.
  */
 export type ReviewerInvocationResult = ReviewerResult | ReviewerError;
+
+/**
+ * Risk flags indicating which risk conditions have been triggered.
+ *
+ * These flags are used to determine when the reviewer should be invoked.
+ */
+export type RiskFlags =
+  | 'high_risk_path'
+  | 'diff_near_cap'
+  | 'verify_failed'
+  | 'repeated_stop'
+  | 'budget_warning';
