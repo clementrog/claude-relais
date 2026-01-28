@@ -1,60 +1,64 @@
 {
   "v": 5,
-  "id": "WP-045",
-  "milestone": "M5",
-  "goal": "Implement rollback to restore repo to base_commit state after STOP",
+  "id": "WP-050",
+  "milestone": "M6",
+  "goal": "Implement REPORT.json generation with full tick data",
 
   "context": {
-    "why": "When Judge detects a violation (scope, diff limits, etc.), the repo must be rolled back to the base_commit state. This resets tracked files and removes only the untracked files that were touched by the builder.",
-    "deps": ["WP-040"],
-    "extract": "From PRD Appendix B: Rollback steps: 1) git reset --hard <base_commit>, 2) Remove untracked touched paths captured by the runner (only those paths). Rollback is mandatory on any STOP after builder ran."
+    "why": "Every tick must end with REPORT.json containing complete tick data: run_id, timestamps, task info, verdict, code, blast_radius, scope check, diff, verification results, and budgets.",
+    "deps": ["WP-040", "WP-041", "WP-042", "WP-043"],
+    "extract": "From PRD: REPORT.json is the only source of truth (machine↔machine). Required fields: run_id, started_at, ended_at, duration_ms, base_commit, head_commit, task, verdict, code, blast_radius, scope, diff, verification, budgets."
   },
 
   "subtasks": [
-    "1. Create src/lib/rollback.ts module for rollback functions",
-    "2. Create RollbackResult interface with success, errors, paths_removed",
-    "3. Implement rollbackTracked(baseCommit): git reset --hard <base_commit>",
-    "4. Implement removeUntrackedPaths(paths): remove specific untracked files",
-    "5. Implement rollback(baseCommit, untrackedPaths): full rollback operation",
-    "6. Handle errors gracefully (file already removed, permission issues)",
+    "1. Create src/types/report.ts with ReportData interface matching report.schema.json",
+    "2. Create src/lib/report.ts module for report generation",
+    "3. Implement generateRunId(): creates unique run identifier",
+    "4. Implement buildReport(tickData): constructs ReportData from tick results",
+    "5. Implement writeReport(report, path): writes report atomically",
+    "6. Include blast_radius, scope check result, diff summary, verification runs",
     "7. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "RollbackResult_interface": {
-      "success": "boolean - true if rollback completed",
-      "tracked_reset": "boolean - whether git reset succeeded",
-      "paths_removed": "string[] - untracked paths that were removed",
-      "errors": "string[] - any errors encountered"
-    },
-    "git_commands": {
-      "reset_tracked": "git reset --hard <base_commit>",
-      "verify_clean": "git status --porcelain (should be empty after rollback)"
-    },
-    "untracked_removal": "Use fs.unlink for files, fs.rm with recursive for directories"
+    "ReportData_interface": {
+      "run_id": "string - unique run identifier",
+      "started_at": "string - ISO datetime",
+      "ended_at": "string - ISO datetime",
+      "duration_ms": "number - tick duration",
+      "base_commit": "string - commit SHA at tick start",
+      "head_commit": "string - commit SHA at tick end",
+      "task": "object - task_id, milestone_id, task_kind, intent",
+      "verdict": "success | stop | blocked",
+      "code": "string - result code (SUCCESS, STOP_*, BLOCKED_*)",
+      "blast_radius": "object - files_touched, lines_added, lines_deleted, new_files",
+      "scope": "object - ok, violations, touched_paths",
+      "diff": "object - files_changed, lines_changed, diff_patch_path",
+      "verification": "object - exec_mode, runs, verify_log_path",
+      "budgets": "object - milestone_id, ticks, orchestrator_calls, etc."
+    }
   },
 
   "scope": {
-    "write": ["src/lib/rollback.ts", "src/lib/index.ts"],
-    "create_under": ["src/lib/"],
+    "write": ["src/types/report.ts", "src/lib/report.ts", "src/lib/index.ts"],
+    "create_under": ["src/types/", "src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "rollbackTracked resets tracked files to base_commit",
-    "removeUntrackedPaths removes only specified paths",
-    "rollback combines both operations correctly",
-    "Errors are captured, not thrown",
-    "RollbackResult reports what was done",
+    "ReportData interface matches report.schema.json structure",
+    "generateRunId creates unique identifiers",
+    "buildReport constructs complete report from tick data",
+    "writeReport uses atomic write (from WP-014)",
+    "All required fields are populated",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "MED",
+  "risk": "LOW",
   "notes": [
-    "Only remove paths that were touched (captured from diff analysis)",
-    "Don't blindly delete all untracked files - only builder-touched ones",
-    "Use execSync for git commands (synchronous is fine for rollback)"
+    "Use writeJsonAtomic from src/lib/fs.ts for atomic writes",
+    "run_id format: timestamp + random suffix"
   ]
 }

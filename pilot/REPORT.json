@@ -1,35 +1,37 @@
 {
   "v": 3,
-  "task": "WP-045",
+  "task": "WP-050",
   "status": "DONE",
   "subtasks_completed": [
-    "Created src/lib/rollback.ts module with rollback functions",
-    "Created RollbackResult interface with success, tracked_reset, paths_removed, errors fields",
-    "Implemented rollbackTracked(baseCommit): git reset --hard <base_commit>",
-    "Implemented removeUntrackedPaths(paths): removes specific untracked files/directories",
-    "Implemented rollback(baseCommit, untrackedPaths): full rollback operation combining both",
-    "Added error handling for file already removed (ENOENT), permission issues, etc.",
-    "Exported rollback functions from src/lib/index.ts"
+    "Created src/lib/report.ts module with generateRunId, buildReport, and writeReport functions",
+    "Implemented generateRunId() with timestamp + random suffix format",
+    "Implemented buildReport(tickData) to construct complete ReportData from tick results",
+    "Implemented writeReport(report, path) using atomicWriteJson for atomic writes",
+    "Included blast_radius, scope check result, diff summary, and verification runs transformation",
+    "Exported report functions from src/lib/index.ts"
   ],
-  "git_diff_files": ["src/lib/index.ts", "src/lib/rollback.ts"],
+  "git_diff_files": [
+    "src/lib/index.ts",
+    "src/lib/report.ts"
+  ],
   "files": {
     "changed": ["src/lib/index.ts"],
-    "created": ["src/lib/rollback.ts"],
+    "created": ["src/lib/report.ts"],
     "deleted": []
   },
   "verify": [
     {
       "cmd": "pnpm build",
       "exit": 0,
-      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
+      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc\n"
     }
   ],
   "notes": [
-    "rollbackTracked uses execSync for synchronous git reset --hard",
-    "removeUntrackedPaths uses fs.unlink for files and fs.rm with recursive for directories",
-    "Errors are captured in the result object, not thrown",
-    "ENOENT errors (file not found) are handled gracefully and not reported as errors",
-    "RollbackResult.success is true only if tracked_reset succeeded and no errors occurred"
+    "ReportData interface already exists in src/types/report.ts and matches report.schema.json",
+    "generateRunId is exported as generateReportRunId to avoid conflict with existing generateRunId from state.ts",
+    "buildReport accepts TickReportData interface with all necessary tick execution data",
+    "Verification runs are transformed from verify.ts format to report format with phase, cmd, args",
+    "All required fields from report.schema.json are populated in buildReport"
   ],
   "blockers": []
 }

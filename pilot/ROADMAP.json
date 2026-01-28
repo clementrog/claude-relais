@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M5",
+  "current": "M6",
   "milestones": [
     {
       "id": "M1",
@@ -61,7 +61,7 @@
     {
       "id": "M5",
       "title": "Judge & Verification",
-      "status": "pending",
+      "status": "completed",
       "risk": "HIGH",
       "tasks": [
         "WP-040: Git diff analysis (touched set)",

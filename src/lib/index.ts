@@ -98,3 +98,10 @@ export {
   rollback,
   type RollbackResult,
 } from './rollback.js';
+
+export {
+  generateRunId as generateReportRunId,
+  buildReport,
+  writeReport,
+  type TickReportData,
+} from './report.js';
