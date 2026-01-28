@@ -1,13 +1,13 @@
 {
   "v": 3,
-  "phase": "IDLE",
-  "mode": null,
-  "task": null,
+  "phase": "DISPATCH",
+  "mode": "single",
+  "task": "WP-020",
   "milestone": "M3",
-  "branch": "main",
+  "branch": "task/wp-020-claude-cli-wrapper",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
-  "next": "PLAN",
-  "ts": "2026-01-28T11:10:00Z"
+  "next": "BUILD",
+  "ts": "2026-01-28T11:15:00Z"
 }

@@ -46,3 +46,9 @@ export {
   setTask,
   setBuilderResult,
 } from './state.js';
+
+export {
+  buildClaudeArgs,
+  parseClaudeResponse,
+  invokeClaudeCode,
+} from './claude.js';

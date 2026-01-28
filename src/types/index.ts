@@ -53,3 +53,10 @@ export type {
   ReportPointers,
   ReportData,
 } from './report.js';
+
+export type {
+  ClaudeInvocation,
+  ClaudeResponse,
+} from './claude.js';
+
+export { ClaudeError } from './claude.js';

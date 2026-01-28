@@ -1,103 +1,85 @@
 {
   "v": 5,
-  "id": "WP-011",
-  "milestone": "M2",
-  "goal": "Implement the tick state machine (core runner loop)",
+  "id": "WP-020",
+  "milestone": "M3",
+  "goal": "Create Claude Code CLI wrapper for invoking claude with proper flags",
 
   "context": {
-    "why": "The state machine is the heart of relais. One 'relais run' executes one tick through phases: LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END",
-    "deps": ["WP-010", "WP-012", "WP-013", "WP-014"],
-    "extract": "From PRD Section 7: States: 1) LOCK, 2) PREFLIGHT, 3) ORCHESTRATE, 4) BUILD, 5) JUDGE, 6) REPORT, 7) END. Hard attempt limits: Orchestrator calls: 1 (+ optional 1 retry if invalid JSON). Builder calls: 1. No other retries."
+    "why": "Relais invokes Claude Code CLI in non-interactive mode with specific flags. Need a clean wrapper to handle invocation, output parsing, and error handling.",
+    "deps": ["WP-010"],
+    "extract": "From PRD: claude -p --output-format json --max-turns N --no-session-persistence --permission-mode MODE --model MODEL --allowedTools TOOLS. Parse stdout JSON, then parse stdout_json.result as the actual model text."
   },
 
   "subtasks": [
-    "1. Create src/types/state.ts with TickState, TickPhase, and TickContext types",
-    "2. Create src/types/report.ts with ReportData, Verdict, and ReportCode types",
-    "3. Create src/lib/state.ts with state management functions",
-    "4. Create src/runner/tick.ts with the main runTick() function",
-    "5. Implement phase transitions with proper error handling",
-    "6. Wire up 'relais run' command to execute runTick()",
-    "7. Export types and update index files"
+    "1. Create src/types/claude.ts with ClaudeInvocation, ClaudeResponse, ClaudeError types",
+    "2. Create src/lib/claude.ts with invokeClaudeCode function",
+    "3. Implement buildClaudeArgs() to construct CLI arguments",
+    "4. Implement parseClaudeResponse() to extract result from JSON wrapper",
+    "5. Add timeout handling and process management",
+    "6. Export from index files"
   ],
 
   "implementation": {
-    "TickPhase": {
-      "type": "enum",
-      "values": ["LOCK", "PREFLIGHT", "ORCHESTRATE", "BUILD", "JUDGE", "REPORT", "END"]
+    "ClaudeInvocation": {
+      "prompt": "string - the prompt to send",
+      "maxTurns": "number - max agentic turns",
+      "permissionMode": "'plan' | 'bypassPermissions'",
+      "model": "string - model alias or full name",
+      "allowedTools": "string | undefined - comma-separated tool list",
+      "systemPrompt": "string | undefined - system prompt file path",
+      "timeout": "number - timeout in ms"
     },
-    "TickState": {
-      "phase": "TickPhase",
-      "run_id": "string - unique ID for this tick",
-      "started_at": "string - ISO timestamp",
-      "base_commit": "string - git HEAD at start",
-      "config": "RelaisConfig",
-      "task": "Task | null - from orchestrator",
-      "builder_result": "BuilderResult | null",
-      "errors": "string[]"
+    "ClaudeResponse": {
+      "success": "boolean",
+      "result": "string | null - the model's text output",
+      "raw": "object - full JSON response",
+      "exitCode": "number",
+      "durationMs": "number"
     },
-    "runTick": {
-      "signature": "async function runTick(config: RelaisConfig): Promise<ReportData>",
-      "phases": [
-        {
-          "name": "LOCK",
-          "action": "acquireLock(config.runner.lockfile)",
-          "on_error": "return BLOCKED_LOCK_HELD"
-        },
-        {
-          "name": "PREFLIGHT",
-          "action": "runPreflight(config)",
-          "on_error": "releaseLock, return BLOCKED_*"
-        },
-        {
-          "name": "ORCHESTRATE",
-          "action": "placeholder - log 'orchestrate not implemented'",
-          "note": "Full implementation in M3"
-        },
-        {
-          "name": "BUILD",
-          "action": "placeholder - log 'build not implemented'",
-          "note": "Full implementation in M4"
-        },
-        {
-          "name": "JUDGE",
-          "action": "placeholder - log 'judge not implemented'",
-          "note": "Full implementation in M5"
-        },
-        {
-          "name": "REPORT",
-          "action": "generateReport(state) - writes REPORT.json and REPORT.md",
-          "note": "Full implementation in M6, basic skeleton now"
-        },
-        {
-          "name": "END",
-          "action": "releaseLock(), return report"
-        }
+    "invokeClaudeCode": {
+      "signature": "async function invokeClaudeCode(config: ClaudeCodeCliConfig, invocation: ClaudeInvocation): Promise<ClaudeResponse>",
+      "behavior": [
+        "1. Build args array from config + invocation",
+        "2. Spawn process with timeout",
+        "3. Capture stdout/stderr",
+        "4. Parse JSON wrapper from stdout",
+        "5. Extract .result field as model output",
+        "6. Return ClaudeResponse with parsed data"
       ]
+    },
+    "CLI_FLAGS": {
+      "-p": "prompt mode (non-interactive)",
+      "--output-format": "json",
+      "--max-turns": "from invocation",
+      "--no-session-persistence": "always",
+      "--permission-mode": "plan or bypassPermissions",
+      "--model": "from invocation",
+      "--allowedTools": "from invocation (optional)",
+      "--system-prompt": "from invocation (optional)"
     }
   },
 
   "scope": {
-    "write": ["src/index.ts"],
-    "create_under": ["src/types", "src/lib", "src/runner"],
+    "write": [],
+    "create_under": ["src/types", "src/lib"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "src/types/state.ts exists with TickState and TickPhase",
-    "src/types/report.ts exists with ReportData, Verdict, ReportCode",
-    "src/runner/tick.ts exists with runTick function",
-    "'relais run' executes the tick and logs phase transitions",
-    "Lock is acquired at start and released at end",
-    "Preflight is executed and blocks if checks fail",
+    "src/types/claude.ts exists with ClaudeInvocation, ClaudeResponse types",
+    "src/lib/claude.ts exists with invokeClaudeCode function",
+    "buildClaudeArgs returns correct CLI flags",
+    "parseClaudeResponse extracts .result from JSON wrapper",
+    "Timeout handling works correctly",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "MED",
   "notes": [
-    "ORCHESTRATE, BUILD, JUDGE are placeholders for now (console.log)",
-    "Focus on the state machine structure and phase transitions",
-    "Use existing utilities: acquireLock, releaseLock, runPreflight, atomicWriteJson"
+    "Use child_process.spawn for process management",
+    "The JSON wrapper has format: { result: 'model output', ... }",
+    "Handle both successful completion and timeout/error cases"
   ]
 }

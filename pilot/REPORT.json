@@ -1,36 +1,29 @@
 {
   "v": 3,
-  "task": "WP-011",
+  "task": "WP-020",
   "status": "DONE",
   "subtasks_completed": [
-    "Created src/types/state.ts with TickState, TickPhase, and TickContext types",
-    "Created src/types/report.ts with ReportData, Verdict, and ReportCode types",
-    "Created src/lib/state.ts with state management functions",
-    "Created src/runner/tick.ts with the main runTick() function implementing the state machine",
-    "Implemented phase transitions with proper error handling (LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END)",
-    "Wired up 'relais run' command to execute runTick()",
-    "Exported types and updated index files"
+    "1. Created src/types/claude.ts with ClaudeInvocation, ClaudeResponse, ClaudeError types",
+    "2. Created src/lib/claude.ts with invokeClaudeCode function",
+    "3. Implemented buildClaudeArgs() to construct CLI arguments",
+    "4. Implemented parseClaudeResponse() to extract result from JSON wrapper",
+    "5. Added timeout handling and process management",
+    "6. Exported from index files"
   ],
   "git_diff_files": [
-    "src/index.ts",
+    "src/lib/claude.ts",
     "src/lib/index.ts",
-    "src/lib/state.ts",
-    "src/runner/tick.ts",
-    "src/types/index.ts",
-    "src/types/report.ts",
-    "src/types/state.ts"
+    "src/types/claude.ts",
+    "src/types/index.ts"
   ],
   "files": {
     "changed": [
-      "src/index.ts",
       "src/lib/index.ts",
       "src/types/index.ts"
     ],
     "created": [
-      "src/lib/state.ts",
-      "src/runner/tick.ts",
-      "src/types/report.ts",
-      "src/types/state.ts"
+      "src/lib/claude.ts",
+      "src/types/claude.ts"
     ],
     "deleted": []
   },
@@ -38,15 +31,9 @@
     {
       "cmd": "pnpm build",
       "exit": 0,
-      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc\n"
+      "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
     }
   ],
-  "notes": [
-    "ORCHESTRATE, BUILD, and JUDGE phases are placeholders (console.log) as specified - full implementation in M3, M4, M5",
-    "Lock is acquired at start (LOCK phase) and released at end (END phase)",
-    "Preflight is executed and blocks if checks fail",
-    "Report generation writes both REPORT.json and REPORT.md",
-    "State machine properly handles errors and ensures lock is always released"
-  ],
+  "notes": [],
   "blockers": []
 }
