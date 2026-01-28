@@ -35,6 +35,22 @@ export interface StopHistoryEntry {
 }
 
 /**
+ * Verify history entry representing a single verification run.
+ */
+export interface VerifyHistoryEntry {
+  /** ISO timestamp when verification ran */
+  ts: string;
+  /** Task ID that was verified */
+  task: string;
+  /** Verification result */
+  result: 'PASS' | 'FAIL' | 'TIMEOUT';
+  /** Command that was executed */
+  cmd: string;
+  /** Duration in milliseconds */
+  ms: number;
+}
+
+/**
  * Guardrail state tracking escalation and risk flags.
  */
 export interface GuardrailState {
@@ -44,6 +60,20 @@ export interface GuardrailState {
   last_risk_flags: string[];
   /** History of stop events (capped to 50 entries) */
   stop_history: StopHistoryEntry[];
+}
+
+/**
+ * Escalation state tracking escalation mode and configuration.
+ */
+export interface EscalationState {
+  /** Escalation mode */
+  mode: 'none' | 'reviewer' | 'human';
+  /** Reason for escalation */
+  reason: string;
+  /** Window ticks for escalation tracking */
+  window_ticks: number;
+  /** Maximum stops allowed in window */
+  max_stops_in_window: number;
 }
 
 /**
@@ -68,6 +98,16 @@ export interface TickState {
   errors: string[];
   /** Guardrail state (optional - absent means no escalation state) */
   guardrail?: GuardrailState;
+  /** Current TASK fingerprint (sha256) */
+  task_fingerprint?: string;
+  /** Fingerprint of last failed task */
+  last_failed_fingerprint?: string;
+  /** Consecutive failures count */
+  failure_streak?: number;
+  /** Last N verify results (capped to 50 entries) */
+  verify_history?: VerifyHistoryEntry[];
+  /** Current escalation state */
+  escalation?: EscalationState;
 }
 
 /**

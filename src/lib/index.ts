@@ -48,6 +48,10 @@ export {
   appendStopHistory,
   clearForcePatch,
   setForcePatch,
+  updateTaskFingerprint,
+  recordTaskFailure,
+  resetFailureStreak,
+  appendVerifyHistory,
 } from './state.js';
 
 export {
