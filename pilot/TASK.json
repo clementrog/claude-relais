@@ -1,54 +1,55 @@
 {
   "v": 5,
-  "id": "WP-074",
+  "id": "WP-075",
   "milestone": "M8",
-  "goal": "Integrate reviewer into tick flow with new STOP codes",
+  "goal": "Add guardrail fields to STATE.json types",
 
   "context": {
-    "why": "Wire up the reviewer to be called pre-builder when risk is detected. Add new STOP codes for reviewer decisions (force_patch, ask_question).",
-    "deps": ["WP-073"],
-    "extract": "From PRD Appendix C7: Add STOP_REVIEWER_FORCED_PATCH, STOP_REVIEWER_ASK_QUESTION to report.schema.json enum. Option A (recommended): reviewer runs pre-builder on risk. If force_patch -> STOP + set guardrail flag. If ask_question -> STOP + include question in report."
+    "why": "STATE.json needs to track guardrail state: force_patch_until_success flag, last_risk_flags, and stop_history for repeated STOP detection.",
+    "deps": ["WP-074"],
+    "extract": "From PRD Appendix C8: Add guardrail object to STATE with force_patch_until_success (bool), last_risk_flags (string[]), stop_history (array of {run_id, code, at})."
   },
 
   "subtasks": [
-    "1. Add STOP_REVIEWER_FORCED_PATCH and STOP_REVIEWER_ASK_QUESTION to src/types/report.ts StopCode enum",
-    "2. Update relais/schemas/report.schema.json with new codes in the enum",
-    "3. Create src/lib/reviewer-flow.ts with runReviewerIfNeeded(config, context) function",
-    "4. Implement handleReviewerDecision that returns appropriate StopCode or null (proceed)",
-    "5. Add reviewer_error field to ReportData type for graceful degradation",
-    "6. Export from src/lib/index.ts"
+    "1. Add GuardrailState interface to src/types/state.ts",
+    "2. Add StopHistoryEntry interface (run_id, code, at timestamp)",
+    "3. Add optional guardrail field to StateData interface",
+    "4. Export new types from src/types/index.ts",
+    "5. Add helper functions to src/lib/state.ts for updating guardrail state"
   ],
 
   "implementation": {
-    "flow": {
-      "pre_builder": "If shouldTriggerReviewer -> call invokeReviewer -> handle decision",
-      "force_patch": "Return STOP_REVIEWER_FORCED_PATCH, caller sets guardrail.force_patch_until_success",
-      "ask_question": "Return STOP_REVIEWER_ASK_QUESTION, include question in report",
-      "proceed": "Return null, continue to builder",
-      "error": "Log reviewer_error, degrade gracefully (default to force_patch flag if pre-build)"
+    "types": {
+      "StopHistoryEntry": "{ run_id: string, code: string, at: string }",
+      "GuardrailState": "{ force_patch_until_success: boolean, last_risk_flags: string[], stop_history: StopHistoryEntry[] }"
     },
-    "new_stop_codes": ["STOP_REVIEWER_FORCED_PATCH", "STOP_REVIEWER_ASK_QUESTION"]
+    "helpers": {
+      "appendStopHistory": "Add entry, cap to 50 entries",
+      "clearForcePatch": "Set force_patch_until_success=false on success",
+      "setForcePatch": "Set force_patch_until_success=true"
+    }
   },
 
   "scope": {
-    "write": ["src/lib/reviewer-flow.ts", "src/types/report.ts", "src/lib/index.ts", "relais/schemas/report.schema.json"],
-    "create_under": ["src/lib/"],
+    "write": ["src/types/state.ts", "src/lib/state.ts", "src/types/index.ts", "src/lib/index.ts"],
+    "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "tests/**"]
+    "forbidden": ["pilot/*", "relais/*", "tests/**"]
   },
 
   "acceptance": [
-    "STOP_REVIEWER_FORCED_PATCH and STOP_REVIEWER_ASK_QUESTION in StopCode enum",
-    "report.schema.json updated with new codes",
-    "runReviewerIfNeeded returns ReviewerFlowResult with stopCode or proceed",
-    "Graceful error handling sets reviewer_error",
+    "GuardrailState and StopHistoryEntry interfaces defined",
+    "StateData has optional guardrail?: GuardrailState field",
+    "appendStopHistory caps at 50 entries",
+    "clearForcePatch and setForcePatch helpers work",
+    "Types exported correctly",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
-  "risk": "MED",
+  "risk": "LOW",
   "notes": [
-    "This is the integration layer - connects risk.ts + reviewer.ts",
-    "Does not modify main tick loop yet - that's for the runner itself"
+    "guardrail is optional - absent means no escalation state",
+    "stop_history capped to prevent unbounded growth"
   ]
 }
