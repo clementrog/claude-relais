@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-032",
-  "milestone": "M4",
-  "branch": "task/wp-032-turn-limits",
+  "task": "WP-040",
+  "milestone": "M5",
+  "branch": "task/wp-040-diff-analysis",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T12:20:00Z"
+  "ts": "2026-01-28T12:30:00Z"
 }

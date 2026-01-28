@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M4",
+  "current": "M5",
   "milestones": [
     {
       "id": "M1",
@@ -50,7 +50,7 @@
     {
       "id": "M4",
       "title": "Builder Integration",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
         "WP-030: Builder invocation (bypassPermissions + allowedTools)",

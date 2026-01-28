@@ -1,58 +1,66 @@
 {
   "v": 5,
-  "id": "WP-032",
-  "milestone": "M4",
-  "goal": "Enforce turn limits for builder invocations",
+  "id": "WP-040",
+  "milestone": "M5",
+  "goal": "Implement git diff analysis to compute touched set for Judge phase",
 
   "context": {
-    "why": "Builder should not exceed configured max_turns. Task-specified max_turns must be validated against config limits (min 1, max config.builder.claude_code.max_turns). Track actual turns used if available.",
-    "deps": ["WP-030", "WP-031"],
-    "extract": "From PRD: max_turns bounded (config), minimum 1, maximum 40 per schema. Hard caps on turns and prompt size."
+    "why": "Judge needs to compute the 'touched set' (all files modified by builder) to enforce scope rules and diff limits. This is based on git reality, not builder's self-report.",
+    "deps": ["WP-012"],
+    "extract": "From PRD Section 10: Touched set = tracked (git diff --name-status base_commit..HEAD) + untracked (git status --porcelain). Compute files_touched, lines_added, lines_deleted, new_files."
   },
 
   "subtasks": [
-    "1. Add turn limit validation in runBuilder before invocation",
-    "2. Validate task.builder.max_turns >= 1",
-    "3. Cap task.builder.max_turns to config.builder.claude_code.max_turns if exceeded",
-    "4. Add turnsUsed field to BuilderInvocationResult (parsed from raw response if available)",
-    "5. Add turnsRequested field to BuilderInvocationResult for tracking",
-    "6. Log warning when task turns are capped"
+    "1. Create src/lib/diff.ts module for diff analysis functions",
+    "2. Implement getTouchedTracked(baseCommit): get files from git diff --name-status",
+    "3. Implement getTouchedUntracked(): get new/modified untracked files from git status --porcelain",
+    "4. Implement getDiffStats(baseCommit): get lines added/deleted from git diff --numstat",
+    "5. Create DiffAnalysis interface with files_touched, lines_added, lines_deleted, new_files, touched_paths",
+    "6. Implement analyzeDiff(baseCommit): returns full DiffAnalysis",
+    "7. Export from src/lib/index.ts"
   ],
 
   "implementation": {
-    "validation_flow": [
-      "1. Get task.builder.max_turns (requested turns)",
-      "2. Clamp to range [1, config.builder.claude_code.max_turns]",
-      "3. Log warning if clamping occurred",
-      "4. Use clamped value for --max-turns CLI arg",
-      "5. After invocation, extract num_turns from raw response if present"
-    ],
-    "BuilderInvocationResult_update": {
-      "turnsRequested": "number - the turns requested by task (before clamping)",
-      "turnsUsed": "number | null - actual turns used (from raw response, if available)"
+    "DiffAnalysis_interface": {
+      "files_touched": "number - total files in touched set",
+      "lines_added": "number - total lines added",
+      "lines_deleted": "number - total lines deleted",
+      "new_files": "number - count of newly created files",
+      "touched_paths": "string[] - all paths in touched set (tracked + untracked)"
     },
-    "raw_response_parsing": "Claude CLI JSON response may include num_turns field - extract if present"
+    "git_commands": {
+      "tracked_changes": "git diff --name-status <base_commit>..HEAD",
+      "untracked_files": "git status --porcelain (filter lines starting with ?? or A)",
+      "line_stats": "git diff --numstat <base_commit>..HEAD"
+    },
+    "notes": [
+      "Use execGitCommand from src/lib/git.ts for git operations",
+      "Parse name-status output: A=added, M=modified, D=deleted, R=renamed",
+      "Parse numstat output: lines_added lines_deleted filename (tab-separated)",
+      "Handle binary files in numstat (shows - - instead of numbers)"
+    ]
   },
 
   "scope": {
-    "write": ["src/runner/builder.ts"],
-    "create_under": [],
+    "write": ["src/lib/diff.ts", "src/lib/index.ts"],
+    "create_under": ["src/lib/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "package.json"]
   },
 
   "acceptance": [
-    "task.builder.max_turns is validated against config limits",
-    "max_turns capped to config.builder.claude_code.max_turns if exceeded",
-    "Warning logged when turns are capped",
-    "BuilderInvocationResult includes turnsRequested and turnsUsed fields",
+    "getTouchedTracked returns array of paths changed since base commit",
+    "getTouchedUntracked returns array of new untracked files",
+    "getDiffStats returns lines added and deleted",
+    "analyzeDiff returns complete DiffAnalysis object",
+    "Functions handle empty diff gracefully",
     "pnpm build succeeds"
   ],
 
   "verify": ["pnpm build"],
   "risk": "LOW",
   "notes": [
-    "Claude CLI response format: { result: string, num_turns?: number, ... }",
-    "turnsUsed may be null if not available in response"
+    "This is the foundation for scope enforcement in WP-041",
+    "baseCommit will come from TickState (tracked as base_commit_sha)"
   ]
 }

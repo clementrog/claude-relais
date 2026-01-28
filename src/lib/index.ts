@@ -58,3 +58,11 @@ export {
   validateWithSchema,
   type ValidationResult,
 } from './schema.js';
+
+export {
+  getTouchedTracked,
+  getTouchedUntracked,
+  getDiffStats,
+  analyzeDiff,
+  type DiffAnalysis,
+} from './diff.js';
