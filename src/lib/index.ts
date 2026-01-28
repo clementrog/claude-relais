@@ -165,6 +165,9 @@ export {
   checkFingerprintMatch,
   checkWorktreeClean,
   runGuardrailPreflight,
+  classifyVerifyResult,
   type GuardrailState,
   type PreflightResult as GuardrailPreflightResult,
+  type VerifyResultType,
+  type VerifyClassification,
 } from './guardrails.js';
