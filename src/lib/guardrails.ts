@@ -15,6 +15,23 @@ import { getCurrentBranch, isWorktreeClean } from './git.js';
 import { computeFingerprint } from './fingerprint.js';
 
 /**
+ * Verify result type classification.
+ */
+export type VerifyResultType = 'PASS' | 'FAIL' | 'TIMEOUT';
+
+/**
+ * Classification result for a verify command execution.
+ */
+export interface VerifyClassification {
+  /** Result type: PASS, FAIL, or TIMEOUT */
+  resultType: VerifyResultType;
+  /** STOP code if verification failed or timed out, null if passed */
+  stopCode: ReportCode | null;
+  /** Whether this result should increment the failure streak */
+  shouldIncrementFailureStreak: boolean;
+}
+
+/**
  * State structure required for guardrail preflight checks.
  */
 export interface GuardrailState {
@@ -183,4 +200,75 @@ export function runGuardrailPreflight(
 
   // All checks passed
   return { ok: true };
+}
+
+/**
+ * Classifies a verify command result into PASS, FAIL, or TIMEOUT.
+ *
+ * Classification rules:
+ * - PASS: exitCode === 0 && !timedOut
+ * - FAIL: exitCode !== 0 && !timedOut
+ * - TIMEOUT: timedOut === true
+ *
+ * STOP code mapping:
+ * - PASS: null (no stop)
+ * - FAIL: STOP_VERIFY_FAILED_FAST (if phase === 'fast') or STOP_VERIFY_FAILED_SLOW (if phase === 'slow')
+ * - TIMEOUT: STOP_VERIFY_FLAKY_OR_TIMEOUT
+ *
+ * Failure streak increment:
+ * - TIMEOUT: always increments failure_streak
+ * - FAIL: may increment based on config (default: true)
+ * - PASS: never increments
+ *
+ * @param exitCode - Process exit code
+ * @param timedOut - Whether the command timed out
+ * @param durationMs - Duration in milliseconds (used for logging/debugging)
+ * @param phase - Verification phase ('fast' or 'slow') to determine correct STOP code for FAIL
+ * @returns VerifyClassification with result type, stop code, and failure streak flag
+ *
+ * @example
+ * ```typescript
+ * const classification = classifyVerifyResult(0, false, 1500, 'fast');
+ * // Returns: { resultType: 'PASS', stopCode: null, shouldIncrementFailureStreak: false }
+ *
+ * const classification = classifyVerifyResult(1, false, 2000, 'slow');
+ * // Returns: { resultType: 'FAIL', stopCode: 'STOP_VERIFY_FAILED_SLOW', shouldIncrementFailureStreak: true }
+ *
+ * const classification = classifyVerifyResult(124, true, 30000, 'fast');
+ * // Returns: { resultType: 'TIMEOUT', stopCode: 'STOP_VERIFY_FLAKY_OR_TIMEOUT', shouldIncrementFailureStreak: true }
+ * ```
+ */
+export function classifyVerifyResult(
+  exitCode: number,
+  timedOut: boolean,
+  durationMs: number,
+  phase: 'fast' | 'slow'
+): VerifyClassification {
+  // TIMEOUT takes precedence - if timed out, it's always TIMEOUT
+  if (timedOut) {
+    return {
+      resultType: 'TIMEOUT',
+      stopCode: 'STOP_VERIFY_FLAKY_OR_TIMEOUT',
+      shouldIncrementFailureStreak: true,
+    };
+  }
+
+  // PASS: exit code 0 and not timed out
+  if (exitCode === 0) {
+    return {
+      resultType: 'PASS',
+      stopCode: null,
+      shouldIncrementFailureStreak: false,
+    };
+  }
+
+  // FAIL: non-zero exit code and not timed out
+  const stopCode: ReportCode =
+    phase === 'fast' ? 'STOP_VERIFY_FAILED_FAST' : 'STOP_VERIFY_FAILED_SLOW';
+
+  return {
+    resultType: 'FAIL',
+    stopCode,
+    shouldIncrementFailureStreak: true, // Default to true, caller can override based on config
+  };
 }
