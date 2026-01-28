@@ -57,6 +57,8 @@
         "STOP_BUILDER_OUTPUT_INVALID",
         "STOP_HEAD_MOVED",
         "STOP_INTERRUPTED",
+        "STOP_REVIEWER_FORCED_PATCH",
+        "STOP_REVIEWER_ASK_QUESTION",
         "BLOCKED_BUDGET_EXHAUSTED",
         "BLOCKED_DIRTY_WORKTREE",
         "BLOCKED_LOCK_HELD",
@@ -166,6 +168,11 @@
         "report_md_path": { "type": "string" },
         "history_dir": { "type": "string" }
       }
+    },
+    "reviewer_error": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
     }
   }
 }
