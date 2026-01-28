@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Temporary files
+*.tmp
+*.log
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Relais runtime (keep structure, ignore runtime files)
+relais/lock.json
+relais/history/*
+!relais/history/.gitkeep

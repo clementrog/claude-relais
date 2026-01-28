@@ -1,0 +1,58 @@
+{
+  "v": 5,
+  "id": "WP-001",
+  "milestone": "M1",
+  "goal": "Initialize Node.js/TypeScript project with pnpm and create relais workspace structure",
+
+  "context": {
+    "why": "Foundation for the Relais runner - need proper TypeScript setup with strict config and directory structure matching PRD specs",
+    "deps": [],
+    "extract": "Workspace folder: /relais/ (runner-owned state + history + prompts + schemas). CLI commands: relais init, relais status, relais run, relais doctor"
+  },
+
+  "subtasks": [
+    "1. Run pnpm init to create package.json",
+    "2. Install TypeScript and dev dependencies (typescript, @types/node, tsx)",
+    "3. Create tsconfig.json with strict settings and ESM output",
+    "4. Create directory structure: src/, relais/, relais/schemas/, relais/prompts/, relais/history/, relais/fixtures/",
+    "5. Create src/index.ts with minimal CLI stub (commander.js)",
+    "6. Add build and dev scripts to package.json",
+    "7. Create .gitignore for node_modules, dist, *.tmp"
+  ],
+
+  "implementation": {
+    "tsconfig": {
+      "target": "ES2022",
+      "module": "NodeNext",
+      "moduleResolution": "NodeNext",
+      "strict": true,
+      "esModuleInterop": true,
+      "outDir": "dist",
+      "rootDir": "src"
+    },
+    "dependencies": {
+      "devDependencies": ["typescript", "@types/node", "tsx"],
+      "dependencies": ["commander"]
+    }
+  },
+
+  "scope": {
+    "write": ["package.json", "tsconfig.json", ".gitignore"],
+    "create_under": ["src", "relais", "relais/schemas", "relais/prompts", "relais/history", "relais/fixtures"],
+    "read_forbidden": [".env*", "*.pem", "*.key"],
+    "forbidden": ["pilot/*"]
+  },
+
+  "acceptance": [
+    "package.json exists with name 'relais' and type 'module'",
+    "tsconfig.json exists with strict: true",
+    "src/index.ts exists and exports a main function",
+    "relais/ directory structure exists",
+    "pnpm install succeeds",
+    "pnpm build compiles without errors"
+  ],
+
+  "verify": ["pnpm install", "pnpm build"],
+  "risk": "LOW",
+  "notes": ["This is the foundation task - must complete before other M1 tasks"]
+}

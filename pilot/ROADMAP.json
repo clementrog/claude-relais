@@ -1,0 +1,99 @@
+{
+  "v": 1,
+  "project": "relais",
+  "description": "Deterministic orchestration runner for Claude Code: Brain → Hands → Judge",
+  "stack": {
+    "language": "typescript",
+    "runtime": "node",
+    "package_manager": "pnpm"
+  },
+  "current": "M1",
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Project Scaffolding",
+      "status": "pending",
+      "risk": "LOW",
+      "tasks": [
+        "WP-001: Initialize Node.js/TypeScript project with pnpm",
+        "WP-002: Create relais.config.json",
+        "WP-003: Create JSON schemas (task, builder_result, report)",
+        "WP-004: Create prompt templates (orchestrator, builder)",
+        "WP-005: Create initial STATE.json structure"
+      ]
+    },
+    {
+      "id": "M2",
+      "title": "Core Runner Skeleton",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-010: CLI entry point with commander.js",
+        "WP-011: State machine implementation (tick phases)",
+        "WP-012: Lock acquisition/release with crash safety",
+        "WP-013: Preflight checks (git, config, budgets)",
+        "WP-014: Atomic JSON file writes"
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Orchestrator Integration",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-020: Claude Code CLI wrapper",
+        "WP-021: Orchestrator invocation (plan mode)",
+        "WP-022: TASK.json parsing and validation",
+        "WP-023: Parse retry logic (1 retry on invalid JSON)"
+      ]
+    },
+    {
+      "id": "M4",
+      "title": "Builder Integration",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-030: Builder invocation (bypassPermissions + allowedTools)",
+        "WP-031: Builder result parsing",
+        "WP-032: Turn limits enforcement"
+      ]
+    },
+    {
+      "id": "M5",
+      "title": "Judge & Verification",
+      "status": "pending",
+      "risk": "HIGH",
+      "tasks": [
+        "WP-040: Git diff analysis (touched set)",
+        "WP-041: Scope enforcement (allowed/forbidden globs)",
+        "WP-042: Diff limits enforcement",
+        "WP-043: Verification command execution (argv, no shell)",
+        "WP-044: Parameter validation (metachar rejection)",
+        "WP-045: Rollback implementation"
+      ]
+    },
+    {
+      "id": "M6",
+      "title": "Reporting & History",
+      "status": "pending",
+      "risk": "LOW",
+      "tasks": [
+        "WP-050: REPORT.json generation",
+        "WP-051: REPORT.md rendering",
+        "WP-052: History snapshots",
+        "WP-053: BLOCKED.json generation"
+      ]
+    },
+    {
+      "id": "M7",
+      "title": "Testing & Fixtures",
+      "status": "pending",
+      "risk": "MED",
+      "tasks": [
+        "WP-060: Test framework setup (vitest)",
+        "WP-061: Fixtures F001-F006",
+        "WP-062: Fixtures F007-F012"
+      ]
+    }
+  ]
+}
