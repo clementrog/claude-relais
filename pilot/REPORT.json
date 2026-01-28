@@ -1,29 +1,35 @@
 {
   "v": 3,
-  "task": "WP-060",
+  "task": "WP-061",
   "status": "DONE",
   "subtasks_completed": [
-    "1. Installed vitest and @vitest/coverage-v8 as dev dependencies",
-    "2. Created vitest.config.ts with TypeScript support, test globals, and @ alias resolution",
-    "3. Added 'test' script to package.json",
-    "4. Created tests/ directory structure with tests/lib/ and tests/fixtures/ subdirectories",
-    "5. Added sample test for src/lib/fs.ts covering atomic writes, reads, and cleanup",
-    "6. Added sample test for src/lib/schema.ts covering validation, nested objects, arrays, and schema loading",
-    "7. Verified tests run successfully with pnpm test (17 tests passing)"
+    "1. Created tests/fixtures/F001-tick-limits.test.ts - verifies orchestrator_calls <= 2, builder_calls == 1",
+    "2. Created tests/fixtures/F002-orchestrator-invalid.test.ts - invalid JSON twice -> BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
+    "3. Created tests/fixtures/F003-question-side-effects.test.ts - question kind with edits -> STOP_QUESTION_SIDE_EFFECTS",
+    "4. Created tests/fixtures/F004-verify-only-side-effects.test.ts - verify_only with edits -> STOP_VERIFY_ONLY_SIDE_EFFECTS",
+    "5. Created tests/fixtures/F005-scope-outside-allowed.test.ts - edit outside allowed_globs -> STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED",
+    "6. Created tests/fixtures/F006-forbidden-path.test.ts - edit forbidden path -> STOP_RUNNER_OWNED_MUTATION",
+    "7. Created test helpers/mocks.ts for simulating runner states"
   ],
   "git_diff_files": [
-    "package.json",
-    "pnpm-lock.yaml",
-    "vitest.config.ts",
-    "tests/lib/fs.test.ts",
-    "tests/lib/schema.test.ts"
+    "tests/fixtures/F001-tick-limits.test.ts",
+    "tests/fixtures/F002-orchestrator-invalid.test.ts",
+    "tests/fixtures/F003-question-side-effects.test.ts",
+    "tests/fixtures/F004-verify-only-side-effects.test.ts",
+    "tests/fixtures/F005-scope-outside-allowed.test.ts",
+    "tests/fixtures/F006-forbidden-path.test.ts",
+    "tests/helpers/mocks.ts"
   ],
   "files": {
-    "changed": ["package.json", "pnpm-lock.yaml"],
+    "changed": [],
     "created": [
-      "vitest.config.ts",
-      "tests/lib/fs.test.ts",
-      "tests/lib/schema.test.ts"
+      "tests/fixtures/F001-tick-limits.test.ts",
+      "tests/fixtures/F002-orchestrator-invalid.test.ts",
+      "tests/fixtures/F003-question-side-effects.test.ts",
+      "tests/fixtures/F004-verify-only-side-effects.test.ts",
+      "tests/fixtures/F005-scope-outside-allowed.test.ts",
+      "tests/fixtures/F006-forbidden-path.test.ts",
+      "tests/helpers/mocks.ts"
     ],
     "deleted": []
   },
@@ -36,14 +42,15 @@
     {
       "cmd": "pnpm test run",
       "exit": 0,
-      "output": " RUN  v4.0.18 /Users/clement/projects/relais\n\n ✓ tests/lib/fs.test.ts (9 tests) 45ms\n ✓ tests/lib/schema.test.ts (8 tests) 98ms\n\n Test Files  2 passed (2)\n      Tests  17 passed (17)\n   Start at  16:06:50\n   Duration  421ms (transform 120ms, setup 0ms, import 213ms, tests 143ms, environment 0ms)"
+      "output": "Test Files  8 passed (8)\n     Tests  40 passed (40)\n  Start at  16:14:32\n  Duration  741ms (transform 744ms, setup 0ms, import 1.33s, tests 252ms, environment 1ms)"
     }
   ],
   "notes": [
-    "Vitest 4.0.18 installed with coverage support",
-    "TypeScript paths (@ -> src/) configured and working in tests",
-    "All 17 tests passing: 9 for fs.ts (atomic operations), 8 for schema.ts (validation)",
-    "Build still succeeds after test setup"
+    "All 6 fixture tests (F001-F006) implemented as unit tests of lib functions",
+    "Tests validate expected STOP/BLOCKED codes correctly",
+    "Scope enforcement tests use actual checkScopeViolations function from lib/scope.ts",
+    "Mock helpers created for simulating runner states, tasks, and configurations",
+    "All tests pass successfully"
   ],
   "blockers": []
 }

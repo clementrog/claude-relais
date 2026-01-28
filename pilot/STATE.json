@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-060",
+  "task": "WP-061",
   "milestone": "M7",
-  "branch": "task/wp-060-test-setup",
+  "branch": "task/wp-061-fixtures-1",
   "batch_tasks": [],
   "attempt": 0,
   "blockers": [],
   "next": "JUDGE",
-  "ts": "2026-01-28T14:10:00Z"
+  "ts": "2026-01-28T14:20:00Z"
 }

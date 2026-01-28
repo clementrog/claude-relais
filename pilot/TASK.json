@@ -1,61 +1,56 @@
 {
   "v": 5,
-  "id": "WP-060",
+  "id": "WP-061",
   "milestone": "M7",
-  "goal": "Set up vitest test framework for unit and integration tests",
+  "goal": "Implement fixture tests F001-F006 for core runner behaviors",
 
   "context": {
-    "why": "Tests are essential for validating the runner's behavior. Vitest provides fast, modern testing with TypeScript support. This task sets up the foundation for fixture-based testing.",
-    "deps": [],
-    "extract": "From PRD: Fixtures define the contract (CI-ready). Tests validate critical paths: scope enforcement, verification safety, diff limits, rollback, etc."
+    "why": "Fixture tests validate critical runner behaviors: tick limits, orchestrator output validation, side effect detection, scope enforcement. These are contract tests that ensure the runner behaves correctly.",
+    "deps": ["WP-060"],
+    "extract": "From PRD: F001 one_tick_limits, F002 orchestrator_invalid_json_blocks, F003 question_no_side_effects, F004 verify_only_no_side_effects, F005 scope_violation_outside_allowed, F006 forbidden_path_violation."
   },
 
   "subtasks": [
-    "1. Install vitest and related dependencies",
-    "2. Create vitest.config.ts with TypeScript support",
-    "3. Add test script to package.json",
-    "4. Create tests/ directory structure",
-    "5. Add sample test for src/lib/fs.ts (atomic writes)",
-    "6. Add sample test for src/lib/schema.ts (validation)",
-    "7. Verify tests run with pnpm test"
+    "1. Create tests/fixtures/F001-tick-limits.test.ts - verify orchestrator_calls <= 2, builder_calls == 1",
+    "2. Create tests/fixtures/F002-orchestrator-invalid.test.ts - invalid JSON twice -> BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
+    "3. Create tests/fixtures/F003-question-side-effects.test.ts - question kind with edits -> STOP_QUESTION_SIDE_EFFECTS",
+    "4. Create tests/fixtures/F004-verify-only-side-effects.test.ts - verify_only with edits -> STOP_VERIFY_ONLY_SIDE_EFFECTS",
+    "5. Create tests/fixtures/F005-scope-outside-allowed.test.ts - edit outside allowed_globs -> STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED",
+    "6. Create tests/fixtures/F006-forbidden-path.test.ts - edit forbidden path -> STOP_RUNNER_OWNED_MUTATION",
+    "7. Create test helpers/mocks for simulating runner states"
   ],
 
   "implementation": {
-    "dependencies": [
-      "vitest (dev)",
-      "@vitest/coverage-v8 (dev, optional)"
-    ],
-    "vitest_config": {
-      "test.include": ["tests/**/*.test.ts"],
-      "test.globals": true,
-      "resolve.alias": "@ -> src/"
+    "fixtures": {
+      "F001": "one_tick_limits - verify call counts are bounded",
+      "F002": "orchestrator_invalid_json_blocks - invalid JSON blocks execution",
+      "F003": "question_no_side_effects - question tasks reject side effects",
+      "F004": "verify_only_no_side_effects - verify_only tasks reject side effects",
+      "F005": "scope_violation_outside_allowed - out-of-scope paths detected",
+      "F006": "forbidden_path_violation - runner-owned paths protected"
     },
-    "directory_structure": {
-      "tests/": "test files",
-      "tests/lib/": "unit tests for src/lib/",
-      "tests/fixtures/": "fixture test data (future)"
-    }
+    "test_approach": "Unit test the individual lib functions that implement these behaviors"
   },
 
   "scope": {
-    "write": ["vitest.config.ts", "tests/**/*.ts"],
-    "create_under": ["tests/"],
+    "write": ["tests/fixtures/**/*.ts", "tests/helpers/**/*.ts"],
+    "create_under": ["tests/fixtures/", "tests/helpers/"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
     "forbidden": ["pilot/*", "relais/*", "src/**"]
   },
 
   "acceptance": [
-    "vitest installed and configured",
-    "pnpm test runs successfully",
-    "At least 2 sample tests pass",
-    "TypeScript paths work in tests",
-    "pnpm build still succeeds"
+    "All 6 fixture tests implemented",
+    "Tests validate the expected STOP/BLOCKED codes",
+    "Tests for scope enforcement use actual scope checking functions",
+    "pnpm test passes with new fixture tests",
+    "pnpm build succeeds"
   ],
 
-  "verify": ["pnpm build", "pnpm test"],
-  "risk": "LOW",
+  "verify": ["pnpm build", "pnpm test run"],
+  "risk": "MED",
   "notes": [
-    "This is foundation work - actual fixture tests come in WP-061/062",
-    "Can modify package.json to add test script"
+    "These are primarily unit tests of the lib functions",
+    "Full integration tests require mocking Claude Code CLI"
   ]
 }
