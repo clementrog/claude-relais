@@ -1,30 +1,29 @@
 {
   "v": 3,
-  "task": "WP-053",
+  "task": "WP-060",
   "status": "DONE",
   "subtasks_completed": [
-    "Created src/types/blocked.ts with BlockedData interface",
-    "Created src/lib/blocked.ts module for BLOCKED.json generation",
-    "Implemented buildBlockedData(code, reason, remediation) function",
-    "Implemented writeBlocked(data, path) function with atomic write",
-    "Defined remediation messages for each BLOCKED code",
-    "Exported BlockedData from src/types/index.ts",
-    "Exported buildBlockedData and writeBlocked from src/lib/index.ts"
+    "1. Installed vitest and @vitest/coverage-v8 as dev dependencies",
+    "2. Created vitest.config.ts with TypeScript support, test globals, and @ alias resolution",
+    "3. Added 'test' script to package.json",
+    "4. Created tests/ directory structure with tests/lib/ and tests/fixtures/ subdirectories",
+    "5. Added sample test for src/lib/fs.ts covering atomic writes, reads, and cleanup",
+    "6. Added sample test for src/lib/schema.ts covering validation, nested objects, arrays, and schema loading",
+    "7. Verified tests run successfully with pnpm test (17 tests passing)"
   ],
   "git_diff_files": [
-    "src/lib/blocked.ts",
-    "src/lib/index.ts",
-    "src/types/blocked.ts",
-    "src/types/index.ts"
+    "package.json",
+    "pnpm-lock.yaml",
+    "vitest.config.ts",
+    "tests/lib/fs.test.ts",
+    "tests/lib/schema.test.ts"
   ],
   "files": {
-    "changed": [
-      "src/lib/index.ts",
-      "src/types/index.ts"
-    ],
+    "changed": ["package.json", "pnpm-lock.yaml"],
     "created": [
-      "src/lib/blocked.ts",
-      "src/types/blocked.ts"
+      "vitest.config.ts",
+      "tests/lib/fs.test.ts",
+      "tests/lib/schema.test.ts"
     ],
     "deleted": []
   },
@@ -33,12 +32,18 @@
       "cmd": "pnpm build",
       "exit": 0,
       "output": "> relais@1.0.0 build /Users/clement/projects/relais\n> tsc"
+    },
+    {
+      "cmd": "pnpm test run",
+      "exit": 0,
+      "output": " RUN  v4.0.18 /Users/clement/projects/relais\n\n ✓ tests/lib/fs.test.ts (9 tests) 45ms\n ✓ tests/lib/schema.test.ts (8 tests) 98ms\n\n Test Files  2 passed (2)\n      Tests  17 passed (17)\n   Start at  16:06:50\n   Duration  421ms (transform 120ms, setup 0ms, import 213ms, tests 143ms, environment 0ms)"
     }
   ],
   "notes": [
-    "BLOCKED.json generation is now available for preflight failures",
-    "Remediation messages are defined for all 7 BLOCKED codes including BLOCKED_ORCHESTRATOR_OUTPUT_INVALID",
-    "writeBlocked uses atomicWriteJson for crash-safe writes"
+    "Vitest 4.0.18 installed with coverage support",
+    "TypeScript paths (@ -> src/) configured and working in tests",
+    "All 17 tests passing: 9 for fs.ts (atomic operations), 8 for schema.ts (validation)",
+    "Build still succeeds after test setup"
   ],
   "blockers": []
 }

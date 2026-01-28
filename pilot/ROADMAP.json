@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M6",
+  "current": "M7",
   "milestones": [
     {
       "id": "M1",
@@ -75,7 +75,7 @@
     {
       "id": "M6",
       "title": "Reporting & History",
-      "status": "pending",
+      "status": "completed",
       "risk": "LOW",
       "tasks": [
         "WP-050: REPORT.json generation",
