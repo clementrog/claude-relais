@@ -26,3 +26,5 @@ export type {
 } from './config.js';
 
 export type { LockInfo } from './lock.js';
+
+export type { BlockedCode, PreflightResult } from './preflight.js';

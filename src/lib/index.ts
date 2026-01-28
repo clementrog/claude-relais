@@ -27,3 +27,13 @@ export {
   releaseLock,
   LockHeldError,
 } from './lock.js';
+
+export {
+  isGitRepo,
+  isWorktreeClean,
+  getHeadCommit,
+  getDiffFiles,
+  getUntrackedFiles,
+} from './git.js';
+
+export { runPreflight } from './preflight.js';
