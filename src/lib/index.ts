@@ -192,3 +192,11 @@ export {
   type InvokeResult,
   type NormalizedError,
 } from './transport.js';
+
+export {
+  handleTransportStall,
+  checkAndHandleStall,
+  formatStallResult,
+  type StallHandlingResult,
+  type StallHandlingOptions,
+} from './tick.js';
