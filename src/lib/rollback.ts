@@ -8,6 +8,7 @@
 import { execSync } from 'node:child_process';
 import { unlink, rm } from 'node:fs/promises';
 import { stat } from 'node:fs/promises';
+import { unlinkSync, rmSync, statSync } from 'node:fs';
 
 /**
  * Result of a rollback operation.
@@ -32,6 +33,31 @@ export interface RollbackResult {
    * Any errors encountered during rollback.
    */
   errors: string[];
+}
+
+/**
+ * Result of a rollback operation (new format for STOP code handling).
+ */
+export interface RollbackResultNew {
+  /**
+   * True if rollback completed successfully.
+   */
+  ok: boolean;
+
+  /**
+   * The commit SHA that was restored to.
+   */
+  restoredCommit: string;
+
+  /**
+   * Files that were removed during rollback.
+   */
+  removedFiles: string[];
+
+  /**
+   * Error message if rollback failed, null otherwise.
+   */
+  error: string | null;
 }
 
 /**
@@ -166,4 +192,148 @@ export async function rollback(
     paths_removed: untrackedResult.paths_removed,
     errors,
   };
+}
+
+/**
+ * Synchronous version of removeUntrackedPaths for use in rollbackToCommit.
+ */
+function removeUntrackedPathsSync(paths: string[]): {
+  paths_removed: string[];
+  errors: string[];
+} {
+  const paths_removed: string[] = [];
+  const errors: string[] = [];
+
+  for (const path of paths) {
+    try {
+      // Check if path exists and is a directory
+      const stats = statSync(path);
+      const isDirectory = stats.isDirectory();
+
+      if (isDirectory) {
+        // Use rmSync with recursive for directories
+        rmSync(path, { recursive: true, force: true });
+      } else {
+        // Use unlinkSync for files
+        unlinkSync(path);
+      }
+
+      paths_removed.push(path);
+    } catch (error) {
+      // Handle errors gracefully - file may already be removed, permission issues, etc.
+      const errorMsg = `Failed to remove ${path}: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+
+      // Check if it's a "file not found" error (ENOENT) - this is acceptable
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        // File/directory doesn't exist - consider it already removed
+        continue;
+      }
+
+      errors.push(errorMsg);
+    }
+  }
+
+  return { paths_removed, errors };
+}
+
+/**
+ * Resets to base commit and removes untracked files created by builder.
+ *
+ * This is the synchronous version used for STOP code handling.
+ * It resets tracked files to the base commit and removes specified untracked files.
+ *
+ * @param baseCommit - The commit SHA to reset to
+ * @param untrackedToRemove - Optional array of untracked file/directory paths to remove
+ * @returns RollbackResultNew with success status and details
+ *
+ * @example
+ * ```typescript
+ * const result = rollbackToCommit('abc123', ['temp.txt', 'build/']);
+ * if (result.ok) {
+ *   console.log(`Rolled back to ${result.restoredCommit}`);
+ *   console.log(`Removed ${result.removedFiles.length} files`);
+ * } else {
+ *   console.error(`Rollback failed: ${result.error}`);
+ * }
+ * ```
+ */
+export function rollbackToCommit(
+  baseCommit: string,
+  untrackedToRemove: string[] = []
+): RollbackResultNew {
+  try {
+    // Step 1: Reset tracked files
+    execSync(`git reset --hard ${baseCommit}`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Step 2: Remove untracked files
+    const untrackedResult = removeUntrackedPathsSync(untrackedToRemove);
+
+    // If there were errors removing untracked files, still consider it successful
+    // as long as git reset succeeded (untracked removal errors are less critical)
+    const ok = untrackedResult.errors.length === 0;
+    const error = untrackedResult.errors.length > 0 ? untrackedResult.errors.join('; ') : null;
+
+    return {
+      ok,
+      restoredCommit: baseCommit,
+      removedFiles: untrackedResult.paths_removed,
+      error,
+    };
+  } catch (error) {
+    const errorMsg = `Failed to rollback to ${baseCommit}: ${
+      error instanceof Error ? error.message : String(error)
+    }`;
+
+    return {
+      ok: false,
+      restoredCommit: baseCommit,
+      removedFiles: [],
+      error: errorMsg,
+    };
+  }
+}
+
+/**
+ * Verifies that the git worktree is clean.
+ *
+ * Uses `git diff --exit-code` to check for uncommitted tracked changes.
+ * Also checks that there are no untracked files (via git status --porcelain).
+ *
+ * @returns true if worktree is clean (no uncommitted changes and no untracked files), false otherwise
+ *
+ * @example
+ * ```typescript
+ * if (verifyCleanWorktree()) {
+ *   console.log('Worktree is clean');
+ * } else {
+ *   console.log('Worktree has uncommitted changes');
+ * }
+ * ```
+ */
+export function verifyCleanWorktree(): boolean {
+  try {
+    // Check for uncommitted tracked changes
+    execSync('git diff --exit-code', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Check for untracked files
+    const status = execSync('git status --porcelain', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    // Worktree is clean if status is empty (no uncommitted changes and no untracked files)
+    return status.trim() === '';
+  } catch {
+    // git diff --exit-code exits with non-zero if there are changes
+    // git status might fail in some edge cases
+    return false;
+  }
 }

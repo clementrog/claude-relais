@@ -106,7 +106,10 @@ export {
   rollbackTracked,
   removeUntrackedPaths,
   rollback,
+  rollbackToCommit,
+  verifyCleanWorktree,
   type RollbackResult,
+  type RollbackResultNew,
 } from './rollback.js';
 
 export {
