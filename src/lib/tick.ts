@@ -26,6 +26,59 @@ import { isWorktreeClean, getHeadCommit } from './git.js';
 export const MAX_RETRY_ATTEMPTS = 3;
 
 /**
+ * Recovery prompt to prepend when retrying after a transport stall.
+ *
+ * This prompt reminds the model that previous work may have been lost
+ * and to read files before making assumptions about their state.
+ */
+export const RECOVERY_PROMPT = `IMPORTANT: This is a retry after a transport stall. The previous attempt may have been interrupted.
+
+Do NOT assume your previous edits were applied. The connection may have stalled:
+- Before any changes were made
+- In the middle of changes (partial writes)
+- After changes were made but before confirmation
+
+BEFORE making any edits:
+1. Read the relevant files to verify their current state
+2. Check if your intended changes already exist
+3. Proceed based on the actual file contents, not your memory of what you tried to do
+
+If the task appears completed, verify and report success. If not, complete it from the current state.`;
+
+/**
+ * Returns the recovery prompt to prepend when retrying.
+ *
+ * The recovery prompt is used on any retry (retry_unchanged or retry_degraded)
+ * to remind the model that previous work may have been lost.
+ *
+ * @param retryCount - Current retry count (0 = first attempt, no recovery prompt)
+ * @returns Recovery prompt string if retrying, empty string for first attempt
+ */
+export function getRecoveryPrompt(retryCount: number): string {
+  if (retryCount < 1) {
+    return '';
+  }
+  return RECOVERY_PROMPT;
+}
+
+/**
+ * Builds the full prompt with optional recovery prefix.
+ *
+ * If retrying after a stall, prepends the recovery prompt to the original prompt.
+ *
+ * @param originalPrompt - The original prompt content
+ * @param retryCount - Current retry count (0 = first attempt)
+ * @returns Full prompt with recovery prefix if applicable
+ */
+export function buildPromptWithRecovery(originalPrompt: string, retryCount: number): string {
+  const recovery = getRecoveryPrompt(retryCount);
+  if (!recovery) {
+    return originalPrompt;
+  }
+  return `${recovery}\n\n---\n\n${originalPrompt}`;
+}
+
+/**
  * Action to take based on retry count.
  */
 export type RetryAction = 'retry_unchanged' | 'retry_degraded' | 'block';

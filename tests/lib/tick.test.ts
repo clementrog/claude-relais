@@ -15,7 +15,10 @@ import {
   getDegradedConfigIfNeeded,
   canRetry,
   formatRetryDecision,
+  getRecoveryPrompt,
+  buildPromptWithRecovery,
   MAX_RETRY_ATTEMPTS,
+  RECOVERY_PROMPT,
   type StallHandlingResult,
 } from '@/lib/tick.js';
 import { createTransportStallError } from '@/lib/transport.js';
@@ -629,5 +632,84 @@ describe('getDegradedConfigIfNeeded', () => {
 
     // At retry_count 2, action is 'block', not 'retry_degraded'
     expect(result).toBe(config);
+  });
+});
+
+describe('RECOVERY_PROMPT', () => {
+  it('should be a non-empty string', () => {
+    expect(RECOVERY_PROMPT).toBeTruthy();
+    expect(typeof RECOVERY_PROMPT).toBe('string');
+  });
+
+  it('should mention transport stall', () => {
+    expect(RECOVERY_PROMPT).toContain('transport stall');
+  });
+
+  it('should warn about previous edits', () => {
+    expect(RECOVERY_PROMPT).toContain('previous edits');
+  });
+
+  it('should instruct to read files', () => {
+    expect(RECOVERY_PROMPT).toContain('Read');
+  });
+});
+
+describe('getRecoveryPrompt', () => {
+  it('should return empty string for retry_count 0', () => {
+    expect(getRecoveryPrompt(0)).toBe('');
+  });
+
+  it('should return recovery prompt for retry_count 1', () => {
+    const prompt = getRecoveryPrompt(1);
+    expect(prompt).toBe(RECOVERY_PROMPT);
+  });
+
+  it('should return recovery prompt for retry_count 2', () => {
+    const prompt = getRecoveryPrompt(2);
+    expect(prompt).toBe(RECOVERY_PROMPT);
+  });
+
+  it('should return recovery prompt for higher retry counts', () => {
+    const prompt = getRecoveryPrompt(10);
+    expect(prompt).toBe(RECOVERY_PROMPT);
+  });
+});
+
+describe('buildPromptWithRecovery', () => {
+  const originalPrompt = 'Original task instructions here.';
+
+  it('should return original prompt unchanged for retry_count 0', () => {
+    const result = buildPromptWithRecovery(originalPrompt, 0);
+    expect(result).toBe(originalPrompt);
+  });
+
+  it('should prepend recovery prompt for retry_count 1', () => {
+    const result = buildPromptWithRecovery(originalPrompt, 1);
+
+    expect(result).toContain(RECOVERY_PROMPT);
+    expect(result).toContain(originalPrompt);
+    expect(result.indexOf(RECOVERY_PROMPT)).toBeLessThan(result.indexOf(originalPrompt));
+  });
+
+  it('should include separator between recovery and original', () => {
+    const result = buildPromptWithRecovery(originalPrompt, 1);
+
+    expect(result).toContain('---');
+  });
+
+  it('should work with empty original prompt', () => {
+    const result = buildPromptWithRecovery('', 1);
+
+    expect(result).toContain(RECOVERY_PROMPT);
+    expect(result).toContain('---');
+  });
+
+  it('should preserve multiline original prompts', () => {
+    const multiline = 'Line 1\nLine 2\nLine 3';
+    const result = buildPromptWithRecovery(multiline, 1);
+
+    expect(result).toContain('Line 1');
+    expect(result).toContain('Line 2');
+    expect(result).toContain('Line 3');
   });
 });
