@@ -108,6 +108,12 @@ export interface TickState {
   verify_history?: VerifyHistoryEntry[];
   /** Current escalation state */
   escalation?: EscalationState;
+  /** Retry count for transport stalls (resets on success) */
+  retry_count?: number;
+  /** Kind of error that triggered retry (e.g., 'transport_stalled') */
+  last_error_kind?: string;
+  /** Request ID from last transport stall (for debugging) */
+  last_request_id?: string | null;
 }
 
 /**

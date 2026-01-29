@@ -248,3 +248,58 @@ export function appendVerifyHistory(
     verify_history: updatedHistory,
   };
 }
+
+/**
+ * Increments the retry count for transport stall recovery.
+ *
+ * @param state - Current tick state
+ * @returns Updated tick state with incremented retry_count
+ */
+export function incrementRetryCount(state: TickState): TickState {
+  return {
+    ...state,
+    retry_count: (state.retry_count ?? 0) + 1,
+  };
+}
+
+/**
+ * Records a transport stall error in state.
+ *
+ * Used to track the last error kind and request ID for debugging
+ * and retry policy decisions.
+ *
+ * @param state - Current tick state
+ * @param errorKind - Kind of error (e.g., 'transport_stalled')
+ * @param requestId - Request ID from the stall (for debugging)
+ * @returns Updated tick state
+ */
+export function recordTransportStall(
+  state: TickState,
+  errorKind: string,
+  requestId: string | null
+): TickState {
+  return {
+    ...state,
+    last_error_kind: errorKind,
+    last_request_id: requestId,
+    retry_count: (state.retry_count ?? 0) + 1,
+  };
+}
+
+/**
+ * Resets retry state after a successful tick.
+ *
+ * Clears retry_count, last_error_kind, and last_request_id.
+ * Called when a tick completes successfully to reset recovery state.
+ *
+ * @param state - Current tick state
+ * @returns Updated tick state with cleared retry fields
+ */
+export function resetRetryState(state: TickState): TickState {
+  return {
+    ...state,
+    retry_count: 0,
+    last_error_kind: undefined,
+    last_request_id: undefined,
+  };
+}

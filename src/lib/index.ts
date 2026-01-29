@@ -55,6 +55,9 @@ export {
   recordTaskFailure,
   resetFailureStreak,
   appendVerifyHistory,
+  incrementRetryCount,
+  recordTransportStall,
+  resetRetryState,
 } from './state.js';
 
 export {
