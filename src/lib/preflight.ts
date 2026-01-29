@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import type { RelaisConfig } from '../types/config.js';
 import type { PreflightResult, BlockedCode } from '../types/preflight.js';
 import { cleanupTmpFiles } from './fs.js';
-import { isGitRepo, isWorktreeClean, getHeadCommit } from './git.js';
+import { isGitRepo, isWorktreeCleanExcluding, getHeadCommit } from './git.js';
 
 /**
  * Creates a blocked PreflightResult with the given code and reason.
@@ -113,11 +113,12 @@ export async function runPreflight(config: RelaisConfig): Promise<PreflightResul
       );
     }
 
-    // 2. Check if worktree is clean
-    if (!isWorktreeClean()) {
+    // 2. Check if worktree is clean (excluding runner-owned files)
+    const worktreeStatus = isWorktreeCleanExcluding(config.runner.runner_owned_globs);
+    if (!worktreeStatus.clean) {
       return blocked(
         'BLOCKED_DIRTY_WORKTREE',
-        'Git worktree has uncommitted changes or untracked files'
+        `Git worktree has uncommitted changes: ${worktreeStatus.dirtyFiles.join(', ')}`
       );
     }
 

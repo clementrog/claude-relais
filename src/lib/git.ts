@@ -5,6 +5,7 @@
  */
 
 import { execSync } from 'node:child_process';
+import micromatch from 'micromatch';
 
 /**
  * Checks if the current directory is inside a git repository.
@@ -60,6 +61,95 @@ export function isWorktreeClean(): boolean {
   } catch {
     // If git status fails, assume not clean
     return false;
+  }
+}
+
+/**
+ * Parses git status porcelain output and filters files based on exclusion globs.
+ *
+ * This is a pure function that can be easily tested.
+ *
+ * @param statusOutput - Raw output from `git status --porcelain`
+ * @param excludeGlobs - Glob patterns for files to exclude from the dirty check
+ * @returns Object with `clean` (boolean), `dirtyFiles`, and `excludedFiles`
+ */
+export function parseGitStatusWithExclusions(
+  statusOutput: string,
+  excludeGlobs: string[]
+): { clean: boolean; dirtyFiles: string[]; excludedFiles: string[] } {
+  // Only trim trailing whitespace to preserve leading space in status format
+  const trimmed = statusOutput.trimEnd();
+  if (trimmed === '') {
+    return { clean: true, dirtyFiles: [], excludedFiles: [] };
+  }
+
+  // Parse git status output to get file paths
+  // Format: XY filename (X=staged, Y=unstaged, ?? for untracked)
+  // XY are positions 0-1, space at position 2, path starts at position 3
+  const allFiles = trimmed
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      // Git status porcelain format: XY PATH or XY ORIG -> PATH for renames
+      // XY is always 2 chars, then a space, then the path
+      // But some entries like copies/renames have different formats
+      // Handle renamed/copied files: "R  old -> new" or "C  old -> new"
+      const rawPath = line.slice(3); // Use slice instead of substring for clarity
+      if (rawPath.includes(' -> ')) {
+        return rawPath.split(' -> ')[1];
+      }
+      return rawPath;
+    });
+
+  // Separate excluded vs non-excluded files
+  const excludedFiles: string[] = [];
+  const dirtyFiles: string[] = [];
+
+  for (const file of allFiles) {
+    if (excludeGlobs.length > 0 && micromatch.isMatch(file, excludeGlobs)) {
+      excludedFiles.push(file);
+    } else {
+      dirtyFiles.push(file);
+    }
+  }
+
+  return {
+    clean: dirtyFiles.length === 0,
+    dirtyFiles,
+    excludedFiles,
+  };
+}
+
+/**
+ * Checks if the git worktree is clean, excluding files matching specified globs.
+ *
+ * This is useful for ignoring runner-owned files (like REPORT.json, STATE.json)
+ * that are expected to change every tick.
+ *
+ * @param excludeGlobs - Glob patterns for files to exclude from the dirty check
+ * @returns Object with `clean` (boolean) and `dirtyFiles` (non-excluded dirty files)
+ *
+ * @example
+ * ```typescript
+ * const result = isWorktreeCleanExcluding(['relais/**', 'pilot/**']);
+ * if (!result.clean) {
+ *   console.error('Dirty files:', result.dirtyFiles);
+ * }
+ * ```
+ */
+export function isWorktreeCleanExcluding(
+  excludeGlobs: string[]
+): { clean: boolean; dirtyFiles: string[]; excludedFiles: string[] } {
+  try {
+    const status = execSync('git status --porcelain', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    return parseGitStatusWithExclusions(status, excludeGlobs);
+  } catch {
+    // If git status fails, assume not clean
+    return { clean: false, dirtyFiles: ['<git status failed>'], excludedFiles: [] };
   }
 }
 
