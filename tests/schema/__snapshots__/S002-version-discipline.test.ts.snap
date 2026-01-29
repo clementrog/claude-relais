@@ -1,0 +1,121 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`S002: Version bump discipline > Breaking change detection > should detect if required fields are removed (breaking change) > task.schema.json-required-fields 1`] = `
+[
+  "task_id",
+  "milestone_id",
+  "task_kind",
+  "intent",
+  "scope",
+  "diff_limits",
+  "verification",
+  "builder",
+]
+`;
+
+exports[`S002: Version bump discipline > Breaking change detection > should detect if required fields are removed in builder_result.schema.json > builder_result.schema.json-required-fields 1`] = `
+[
+  "summary",
+  "files_intended",
+  "commands_ran",
+  "notes",
+]
+`;
+
+exports[`S002: Version bump discipline > Breaking change detection > should detect if required fields are removed in report.schema.json > report.schema.json-required-fields 1`] = `
+[
+  "run_id",
+  "started_at",
+  "ended_at",
+  "duration_ms",
+  "base_commit",
+  "head_commit",
+  "task",
+  "verdict",
+  "code",
+  "blast_radius",
+  "scope",
+  "diff",
+  "verification",
+  "budgets",
+]
+`;
+
+exports[`S002: Version bump discipline > Breaking change detection > should detect if required fields are removed in reviewer_result.schema.json > reviewer_result.schema.json-required-fields 1`] = `
+[
+  "decision",
+  "reason_short",
+]
+`;
+
+exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for builder_result.schema.json 1`] = `
+{
+  "$id": "https://relais.local/schemas/builder_result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "summary",
+    "files_intended",
+    "commands_ran",
+    "notes",
+  ],
+  "title": "Relais Builder Result",
+  "type": "object",
+}
+`;
+
+exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for report.schema.json 1`] = `
+{
+  "$id": "https://relais.local/schemas/report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "run_id",
+    "started_at",
+    "ended_at",
+    "duration_ms",
+    "base_commit",
+    "head_commit",
+    "task",
+    "verdict",
+    "code",
+    "blast_radius",
+    "scope",
+    "diff",
+    "verification",
+    "budgets",
+  ],
+  "title": "Relais Report",
+  "type": "object",
+}
+`;
+
+exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for reviewer_result.schema.json 1`] = `
+{
+  "$id": "https://relais.local/schemas/reviewer_result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "decision",
+    "reason_short",
+  ],
+  "title": "Relais Reviewer Result",
+  "type": "object",
+}
+`;
+
+exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for task.schema.json 1`] = `
+{
+  "$id": "https://relais.local/schemas/task.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "required": [
+    "task_id",
+    "milestone_id",
+    "task_kind",
+    "intent",
+    "scope",
+    "diff_limits",
+    "verification",
+    "builder",
+  ],
+  "title": "Relais Task",
+  "type": "object",
+}
+`;
