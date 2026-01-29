@@ -237,6 +237,35 @@ export interface NormalizedError {
  * }
  * ```
  */
+/**
+ * Type guard to check if an error is a TransportStallError.
+ *
+ * @param error - Any value to check
+ * @returns True if the error is a TransportStallError
+ *
+ * @example
+ * ```typescript
+ * const result = await invokeWithStallDetection(config, invocation, 'BUILD');
+ * if (!result.ok && isTransportStallError(result.error)) {
+ *   console.log('Stage:', result.error.stage);
+ *   console.log('Request ID:', result.error.request_id);
+ * }
+ * ```
+ */
+export function isTransportStallError(error: unknown): error is TransportStallError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const obj = error as Record<string, unknown>;
+  return (
+    obj.kind === 'transport_stalled' &&
+    (obj.stage === 'ORCHESTRATE' || obj.stage === 'BUILD') &&
+    (typeof obj.request_id === 'string' || obj.request_id === null) &&
+    typeof obj.raw_error === 'string'
+  );
+}
+
 export function normalizeTransportError(
   error: unknown,
   stage: TransportStallStage

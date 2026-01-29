@@ -8,6 +8,7 @@ import {
   createTransportStallError,
   invokeWithStallDetection,
   normalizeTransportError,
+  isTransportStallError,
   type StallDetectionResult,
   type InvokeResult,
   type NormalizedError,
@@ -354,5 +355,96 @@ describe('normalizeTransportError', () => {
 
     expect(result.message).toContain('Main message');
     expect(result.message).toContain('Stderr content');
+  });
+});
+
+describe('isTransportStallError', () => {
+  it('should return true for valid TransportStallError', () => {
+    const error = createTransportStallError('BUILD', 'Connection stalled', 'req-123');
+    expect(isTransportStallError(error)).toBe(true);
+  });
+
+  it('should return true for TransportStallError with null request_id', () => {
+    const error = createTransportStallError('ORCHESTRATE', 'Timeout');
+    expect(isTransportStallError(error)).toBe(true);
+  });
+
+  it('should verify all required fields are present', () => {
+    const error = createTransportStallError('BUILD', 'Error message', 'req-456');
+
+    expect(error.kind).toBe('transport_stalled');
+    expect(error.stage).toBe('BUILD');
+    expect(error.request_id).toBe('req-456');
+    expect(error.raw_error).toBe('Error message');
+    expect(isTransportStallError(error)).toBe(true);
+  });
+
+  it('should return false for null', () => {
+    expect(isTransportStallError(null)).toBe(false);
+  });
+
+  it('should return false for undefined', () => {
+    expect(isTransportStallError(undefined)).toBe(false);
+  });
+
+  it('should return false for plain object without required fields', () => {
+    expect(isTransportStallError({})).toBe(false);
+    expect(isTransportStallError({ kind: 'other' })).toBe(false);
+  });
+
+  it('should return false for object with wrong kind', () => {
+    const error = {
+      kind: 'other_error',
+      stage: 'BUILD',
+      request_id: null,
+      raw_error: 'test',
+    };
+    expect(isTransportStallError(error)).toBe(false);
+  });
+
+  it('should return false for object with invalid stage', () => {
+    const error = {
+      kind: 'transport_stalled',
+      stage: 'INVALID',
+      request_id: null,
+      raw_error: 'test',
+    };
+    expect(isTransportStallError(error)).toBe(false);
+  });
+
+  it('should return false for object with wrong request_id type', () => {
+    const error = {
+      kind: 'transport_stalled',
+      stage: 'BUILD',
+      request_id: 123, // should be string or null
+      raw_error: 'test',
+    };
+    expect(isTransportStallError(error)).toBe(false);
+  });
+
+  it('should return false for object with wrong raw_error type', () => {
+    const error = {
+      kind: 'transport_stalled',
+      stage: 'BUILD',
+      request_id: null,
+      raw_error: 123, // should be string
+    };
+    expect(isTransportStallError(error)).toBe(false);
+  });
+
+  it('should return false for Error instance', () => {
+    expect(isTransportStallError(new Error('test'))).toBe(false);
+  });
+
+  it('should return false for ClaudeError instance', () => {
+    expect(isTransportStallError(new ClaudeError('test', 1, ''))).toBe(false);
+  });
+
+  it('should return false for string', () => {
+    expect(isTransportStallError('error message')).toBe(false);
+  });
+
+  it('should return false for number', () => {
+    expect(isTransportStallError(42)).toBe(false);
   });
 });

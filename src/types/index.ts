@@ -30,7 +30,12 @@ export type {
 
 export type { LockInfo } from './lock.js';
 
-export type { BlockedCode, PreflightResult } from './preflight.js';
+export type {
+  BlockedCode,
+  PreflightResult,
+  TransportStallStage,
+  TransportStallError,
+} from './preflight.js';
 
 export type { BlockedData } from './blocked.js';
 

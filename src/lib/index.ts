@@ -187,6 +187,7 @@ export {
   createTransportStallError,
   invokeWithStallDetection,
   normalizeTransportError,
+  isTransportStallError,
   type StallDetectionResult,
   type InvokeResult,
   type NormalizedError,
