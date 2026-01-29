@@ -7,9 +7,10 @@
 
 import { execSync } from 'node:child_process';
 import micromatch from 'micromatch';
-import type { TaskScope } from '../types/task.js';
+import type { TaskScope, DiffLimits } from '../types/task.js';
 import type { ScopeConfig } from '../types/config.js';
 import type { ReportCode } from '../types/report.js';
+import type { BlastRadius } from '../types/report.js';
 
 /**
  * Categorized list of files touched since a base commit.
@@ -368,6 +369,180 @@ export function checkScopeViolations(
     ok: true,
     stopCode: null,
     violatingFiles: [],
+    reason: null,
+  };
+}
+
+/**
+ * Result of diff limits checking.
+ */
+export interface DiffCheckResult {
+  /** True if within limits, false if limits exceeded */
+  ok: boolean;
+  /** Stop code if limits exceeded, null otherwise */
+  stopCode: 'STOP_DIFF_TOO_LARGE' | null;
+  /** Blast radius metrics */
+  blastRadius: BlastRadius;
+  /** Human-readable reason for the violation */
+  reason: string | null;
+}
+
+/**
+ * Parses git diff --stat output to extract line counts.
+ *
+ * Git diff --stat format:
+ * - Individual file lines: " file.ts | N +++++" or " file.ts | N +++---"
+ * - Summary line: "N files changed, M insertions(+), K deletions(-)"
+ *
+ * This function extracts the summary line totals.
+ *
+ * @param output - Raw output from `git diff --stat <base>...HEAD`
+ * @returns Object with linesAdded and linesDeleted totals
+ *
+ * @example
+ * ```typescript
+ * const diffStat = ' file1.ts | 5 +++++\n file2.ts | 3 ---\n 2 files changed, 5 insertions(+), 3 deletions(-)';
+ * const result = parseGitDiffStat(diffStat);
+ * // result.linesAdded = 5
+ * // result.linesDeleted = 3
+ * ```
+ */
+export function parseGitDiffStat(output: string): { linesAdded: number; linesDeleted: number } {
+  const trimmed = output.trim();
+  if (trimmed === '') {
+    return { linesAdded: 0, linesDeleted: 0 };
+  }
+
+  const lines = trimmed.split('\n');
+  // The summary line is typically the last line
+  // Format: "N files changed, M insertions(+), K deletions(-)"
+  const summaryLine = lines[lines.length - 1];
+
+  // Match pattern: "N files changed, M insertions(+), K deletions(-)"
+  // Or: "N files changed, M insertions(+)" (no deletions)
+  // Or: "N files changed, K deletions(-)" (no insertions)
+  const filesChangedMatch = summaryLine.match(/(\d+)\s+files?\s+changed/);
+  if (!filesChangedMatch) {
+    // If no summary line found, return zeros
+    return { linesAdded: 0, linesDeleted: 0 };
+  }
+
+  // Extract insertions
+  const insertionsMatch = summaryLine.match(/(\d+)\s+insertions?\(\+\)/);
+  const linesAdded = insertionsMatch ? parseInt(insertionsMatch[1], 10) : 0;
+
+  // Extract deletions
+  const deletionsMatch = summaryLine.match(/(\d+)\s+deletions?\(-\)/);
+  const linesDeleted = deletionsMatch ? parseInt(deletionsMatch[1], 10) : 0;
+
+  return { linesAdded, linesDeleted };
+}
+
+/**
+ * Computes blast radius metrics from git diff.
+ *
+ * Uses git diff --stat to get line counts and TouchedFiles to get file counts.
+ *
+ * @param baseCommit - The base commit SHA to diff against (e.g., 'main' or commit hash)
+ * @param touched - TouchedFiles object with categorized file lists
+ * @returns BlastRadius object with file and line counts
+ * @throws {Error} If git diff --stat command fails
+ *
+ * @example
+ * ```typescript
+ * const touched = getTouchedFiles('main');
+ * const blastRadius = computeBlastRadius('main', touched);
+ * console.log(`Files touched: ${blastRadius.files_touched}`);
+ * console.log(`Lines added: ${blastRadius.lines_added}`);
+ * ```
+ */
+export function computeBlastRadius(baseCommit: string, touched: TouchedFiles): BlastRadius {
+  // Get line counts from git diff --stat
+  let linesAdded = 0;
+  let linesDeleted = 0;
+  try {
+    const diffStatOutput = execSync(`git diff --stat ${baseCommit}...HEAD`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const parsed = parseGitDiffStat(diffStatOutput);
+    linesAdded = parsed.linesAdded;
+    linesDeleted = parsed.linesDeleted;
+  } catch (error) {
+    throw new Error(
+      `Failed to get git diff --stat from ${baseCommit}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  // Compute file counts from TouchedFiles
+  // files_touched = all unique files (modified + added + renamed.to + untracked)
+  const filesTouched = touched.all.length;
+
+  // new_files_count = added + untracked + renamed.to
+  const newFilesSet = new Set([
+    ...touched.added,
+    ...touched.untracked,
+    ...touched.renamed.map((r) => r.to),
+  ]);
+  const newFilesCount = newFilesSet.size;
+
+  return {
+    files_touched: filesTouched,
+    lines_added: linesAdded,
+    lines_deleted: linesDeleted,
+    new_files: newFilesCount,
+  };
+}
+
+/**
+ * Checks blast radius against configured diff limits.
+ *
+ * Returns STOP_DIFF_TOO_LARGE if either limit is exceeded:
+ * - files_touched > max_files_touched
+ * - lines_changed (added + deleted) > max_lines_changed
+ *
+ * @param blastRadius - Blast radius metrics from computeBlastRadius
+ * @param limits - Diff limits configuration
+ * @returns DiffCheckResult with ok status and stopCode
+ *
+ * @example
+ * ```typescript
+ * const blastRadius = computeBlastRadius('main', touched);
+ * const result = checkDiffLimits(blastRadius, { max_files_touched: 10, max_lines_changed: 100 });
+ * if (!result.ok) {
+ *   console.error(`Violation: ${result.stopCode}`, result.reason);
+ * }
+ * ```
+ */
+export function checkDiffLimits(blastRadius: BlastRadius, limits: DiffLimits): DiffCheckResult {
+  const linesChanged = blastRadius.lines_added + blastRadius.lines_deleted;
+  const violations: string[] = [];
+
+  if (blastRadius.files_touched > limits.max_files_touched) {
+    violations.push(
+      `files_touched (${blastRadius.files_touched}) exceeds max_files_touched (${limits.max_files_touched})`
+    );
+  }
+
+  if (linesChanged > limits.max_lines_changed) {
+    violations.push(
+      `lines_changed (${linesChanged}) exceeds max_lines_changed (${limits.max_lines_changed})`
+    );
+  }
+
+  if (violations.length > 0) {
+    return {
+      ok: false,
+      stopCode: 'STOP_DIFF_TOO_LARGE',
+      blastRadius,
+      reason: violations.join('; '),
+    };
+  }
+
+  return {
+    ok: true,
+    stopCode: null,
+    blastRadius,
     reason: null,
   };
 }
