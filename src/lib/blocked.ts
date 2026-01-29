@@ -27,6 +27,8 @@ const REMEDIATION_MESSAGES: Record<string, string> = {
     'History directory exceeds the configured size limit. Manually clean up old history artifacts to free space.',
   BLOCKED_ORCHESTRATOR_OUTPUT_INVALID:
     'The orchestrator returned invalid JSON after retry attempts. Check orchestrator logs and configuration.',
+  BLOCKED_TRANSPORT_STALLED:
+    'Transport stall detected (connection stalled, timeout, or CLI hang). Check network connectivity, Claude API status, and retry. If the issue persists, check the request ID in the error for debugging.',
 };
 
 /**

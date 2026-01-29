@@ -14,7 +14,30 @@ export type BlockedCode =
   | 'BLOCKED_LOCK_HELD'
   | 'BLOCKED_CRASH_RECOVERY_REQUIRED'
   | 'BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED'
-  | 'BLOCKED_BUDGET_EXHAUSTED';
+  | 'BLOCKED_BUDGET_EXHAUSTED'
+  | 'BLOCKED_TRANSPORT_STALLED';
+
+/**
+ * Stage where a transport stall occurred.
+ */
+export type TransportStallStage = 'ORCHESTRATE' | 'BUILD';
+
+/**
+ * Structured error for transport stalls (Cursor/CLI hang, Connection stalled).
+ *
+ * Used when the builder or orchestrator invocation stalls or throws
+ * connection-related errors that prevent completion.
+ */
+export interface TransportStallError {
+  /** Error classification */
+  kind: 'transport_stalled';
+  /** Stage where the stall occurred */
+  stage: TransportStallStage;
+  /** Request ID if parsable from error output */
+  request_id: string | null;
+  /** Raw error message (trimmed to reasonable length) */
+  raw_error: string;
+}
 
 /**
  * Result of running preflight checks.

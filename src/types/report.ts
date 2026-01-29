@@ -42,7 +42,8 @@ export type ReportCode =
   | 'BLOCKED_CRASH_RECOVERY_REQUIRED'
   | 'BLOCKED_ORCHESTRATOR_OUTPUT_INVALID'
   | 'BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED'
-  | 'BLOCKED_MISSING_CONFIG';
+  | 'BLOCKED_MISSING_CONFIG'
+  | 'BLOCKED_TRANSPORT_STALLED';
 
 /**
  * Blast radius information about changes made during the tick.
