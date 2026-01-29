@@ -23,8 +23,15 @@ program
 program
   .command("init")
   .description("Initialize relais workspace in current directory")
-  .action(() => {
-    console.log("relais init - not yet implemented");
+  .option("-f, --force", "Overwrite existing files")
+  .action(async (options) => {
+    try {
+      const { initCommand } = await import('./commands/init.js');
+      await initCommand({ force: options.force });
+    } catch (error) {
+      console.error(`Failed to initialize workspace: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
   });
 
 program
