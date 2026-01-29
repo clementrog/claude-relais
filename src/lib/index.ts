@@ -210,6 +210,11 @@ export {
   formatRetryDecision,
   getRecoveryPrompt,
   buildPromptWithRecovery,
+  shouldResetRetryState,
+  updateStateForOutcome,
+  handleTickSuccess,
+  handleTickStop,
+  handleTickStall,
   MAX_RETRY_ATTEMPTS,
   RECOVERY_PROMPT,
   type StallHandlingResult,
@@ -217,4 +222,5 @@ export {
   type RetryAction,
   type DegradedSettings,
   type RetryDecision,
+  type TickOutcome,
 } from './tick.js';

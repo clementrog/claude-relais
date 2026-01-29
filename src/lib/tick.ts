@@ -17,8 +17,10 @@ import type { TransportStallError, TransportStallStage } from '../types/prefligh
 import type { RollbackResultNew } from './rollback.js';
 import type { DiffLimits } from '../types/task.js';
 import type { RelaisConfig } from '../types/config.js';
+import type { TickState } from '../types/state.js';
 import { rollbackToCommit, verifyCleanWorktree } from './rollback.js';
 import { isWorktreeClean, getHeadCommit } from './git.js';
+import { resetRetryState, recordTransportStall } from './state.js';
 
 /**
  * Maximum retry attempts before blocking.
@@ -318,6 +320,107 @@ export function getDegradedConfigIfNeeded(
   const inputs = extractDegradationInputs(config);
   const degraded = computeDegradedSettings(inputs.max_turns, inputs.diff_limits);
   return applyDegradedConfig(config, degraded);
+}
+
+/**
+ * Tick outcome types for retry state management.
+ */
+export type TickOutcome = 'SUCCESS' | 'STOP' | 'BLOCKED_STALL' | 'BLOCKED_OTHER';
+
+/**
+ * Determines if retry state should be reset based on tick outcome.
+ *
+ * Retry state is reset on:
+ * - SUCCESS: Task completed successfully
+ * - STOP: Task failed with a STOP code (not a transport issue)
+ *
+ * Retry state is NOT reset on:
+ * - BLOCKED_STALL: Transport stall, may retry
+ * - BLOCKED_OTHER: Other blocked conditions
+ *
+ * @param outcome - The tick outcome
+ * @returns true if retry state should be reset
+ */
+export function shouldResetRetryState(outcome: TickOutcome): boolean {
+  return outcome === 'SUCCESS' || outcome === 'STOP';
+}
+
+/**
+ * Updates tick state based on completion outcome.
+ *
+ * On SUCCESS or STOP:
+ * - Resets retry_count to 0
+ * - Clears last_error_kind and last_request_id
+ *
+ * On BLOCKED_STALL:
+ * - Records the stall (increments retry_count, sets error fields)
+ *
+ * On BLOCKED_OTHER:
+ * - No changes to retry state
+ *
+ * @param state - Current tick state
+ * @param outcome - The tick outcome
+ * @param stallInfo - Stall info if outcome is BLOCKED_STALL
+ * @returns Updated tick state
+ */
+export function updateStateForOutcome(
+  state: TickState,
+  outcome: TickOutcome,
+  stallInfo?: { errorKind: string; requestId: string | null }
+): TickState {
+  if (shouldResetRetryState(outcome)) {
+    return resetRetryState(state);
+  }
+
+  if (outcome === 'BLOCKED_STALL' && stallInfo) {
+    return recordTransportStall(state, stallInfo.errorKind, stallInfo.requestId);
+  }
+
+  // BLOCKED_OTHER - no changes
+  return state;
+}
+
+/**
+ * Convenience function to handle successful tick completion.
+ *
+ * Resets all retry state fields to clear recovery mode.
+ * Call this when a tick completes with SUCCESS verdict.
+ *
+ * @param state - Current tick state
+ * @returns Updated state with retry fields cleared
+ */
+export function handleTickSuccess(state: TickState): TickState {
+  return resetRetryState(state);
+}
+
+/**
+ * Convenience function to handle tick failure with STOP code.
+ *
+ * Resets retry state because STOP is a definitive failure,
+ * not a transient transport issue that might benefit from retry.
+ *
+ * @param state - Current tick state
+ * @returns Updated state with retry fields cleared
+ */
+export function handleTickStop(state: TickState): TickState {
+  return resetRetryState(state);
+}
+
+/**
+ * Convenience function to handle transport stall.
+ *
+ * Increments retry_count and records error information.
+ * Call this when a tick is blocked due to transport stall.
+ *
+ * @param state - Current tick state
+ * @param requestId - Request ID from the stall (for debugging)
+ * @returns Updated state with incremented retry count
+ */
+export function handleTickStall(
+  state: TickState,
+  requestId: string | null
+): TickState {
+  return recordTransportStall(state, 'transport_stalled', requestId);
 }
 
 /**

@@ -17,10 +17,17 @@ import {
   formatRetryDecision,
   getRecoveryPrompt,
   buildPromptWithRecovery,
+  shouldResetRetryState,
+  updateStateForOutcome,
+  handleTickSuccess,
+  handleTickStop,
+  handleTickStall,
   MAX_RETRY_ATTEMPTS,
   RECOVERY_PROMPT,
   type StallHandlingResult,
+  type TickOutcome,
 } from '@/lib/tick.js';
+import { createInitialState } from '@/lib/state.js';
 import { createTransportStallError } from '@/lib/transport.js';
 import type { TransportStallError } from '@/types/preflight.js';
 import type { RelaisConfig } from '@/types/config.js';
@@ -711,5 +718,160 @@ describe('buildPromptWithRecovery', () => {
     expect(result).toContain('Line 1');
     expect(result).toContain('Line 2');
     expect(result).toContain('Line 3');
+  });
+});
+
+// Create test state with retry fields
+const createTestStateWithRetry = () => {
+  const config = createMockConfig();
+  const state = createInitialState(config, 'abc123');
+  return {
+    ...state,
+    retry_count: 2,
+    last_error_kind: 'transport_stalled',
+    last_request_id: 'req-123',
+  };
+};
+
+describe('shouldResetRetryState', () => {
+  it('should return true for SUCCESS', () => {
+    expect(shouldResetRetryState('SUCCESS')).toBe(true);
+  });
+
+  it('should return true for STOP', () => {
+    expect(shouldResetRetryState('STOP')).toBe(true);
+  });
+
+  it('should return false for BLOCKED_STALL', () => {
+    expect(shouldResetRetryState('BLOCKED_STALL')).toBe(false);
+  });
+
+  it('should return false for BLOCKED_OTHER', () => {
+    expect(shouldResetRetryState('BLOCKED_OTHER')).toBe(false);
+  });
+});
+
+describe('updateStateForOutcome', () => {
+  it('should reset retry state on SUCCESS', () => {
+    const state = createTestStateWithRetry();
+
+    const result = updateStateForOutcome(state, 'SUCCESS');
+
+    expect(result.retry_count).toBe(0);
+    expect(result.last_error_kind).toBeUndefined();
+    expect(result.last_request_id).toBeUndefined();
+  });
+
+  it('should reset retry state on STOP', () => {
+    const state = createTestStateWithRetry();
+
+    const result = updateStateForOutcome(state, 'STOP');
+
+    expect(result.retry_count).toBe(0);
+    expect(result.last_error_kind).toBeUndefined();
+  });
+
+  it('should record stall on BLOCKED_STALL', () => {
+    const config = createMockConfig();
+    const state = createInitialState(config, 'abc123');
+
+    const result = updateStateForOutcome(state, 'BLOCKED_STALL', {
+      errorKind: 'transport_stalled',
+      requestId: 'req-456',
+    });
+
+    expect(result.retry_count).toBe(1);
+    expect(result.last_error_kind).toBe('transport_stalled');
+    expect(result.last_request_id).toBe('req-456');
+  });
+
+  it('should not modify state on BLOCKED_OTHER', () => {
+    const state = createTestStateWithRetry();
+
+    const result = updateStateForOutcome(state, 'BLOCKED_OTHER');
+
+    expect(result.retry_count).toBe(2);
+    expect(result.last_error_kind).toBe('transport_stalled');
+  });
+});
+
+describe('handleTickSuccess', () => {
+  it('should reset all retry fields', () => {
+    const state = createTestStateWithRetry();
+
+    const result = handleTickSuccess(state);
+
+    expect(result.retry_count).toBe(0);
+    expect(result.last_error_kind).toBeUndefined();
+    expect(result.last_request_id).toBeUndefined();
+  });
+
+  it('should preserve other state fields', () => {
+    const state = {
+      ...createTestStateWithRetry(),
+      task_fingerprint: 'fp-abc',
+    };
+
+    const result = handleTickSuccess(state);
+
+    expect(result.task_fingerprint).toBe('fp-abc');
+  });
+});
+
+describe('handleTickStop', () => {
+  it('should reset all retry fields', () => {
+    const state = createTestStateWithRetry();
+
+    const result = handleTickStop(state);
+
+    expect(result.retry_count).toBe(0);
+    expect(result.last_error_kind).toBeUndefined();
+    expect(result.last_request_id).toBeUndefined();
+  });
+});
+
+describe('handleTickStall', () => {
+  it('should increment retry count', () => {
+    const config = createMockConfig();
+    const state = createInitialState(config, 'abc123');
+
+    const result = handleTickStall(state, 'req-789');
+
+    expect(result.retry_count).toBe(1);
+  });
+
+  it('should set error kind to transport_stalled', () => {
+    const config = createMockConfig();
+    const state = createInitialState(config, 'abc123');
+
+    const result = handleTickStall(state, 'req-789');
+
+    expect(result.last_error_kind).toBe('transport_stalled');
+  });
+
+  it('should set request ID', () => {
+    const config = createMockConfig();
+    const state = createInitialState(config, 'abc123');
+
+    const result = handleTickStall(state, 'req-789');
+
+    expect(result.last_request_id).toBe('req-789');
+  });
+
+  it('should handle null request ID', () => {
+    const config = createMockConfig();
+    const state = createInitialState(config, 'abc123');
+
+    const result = handleTickStall(state, null);
+
+    expect(result.last_request_id).toBeNull();
+  });
+
+  it('should increment existing retry count', () => {
+    const state = createTestStateWithRetry();
+
+    const result = handleTickStall(state, 'req-new');
+
+    expect(result.retry_count).toBe(3);
   });
 });
