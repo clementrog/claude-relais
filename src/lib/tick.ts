@@ -1,17 +1,184 @@
 /**
- * Tick runner with transport stall handling.
+ * Tick runner with transport stall handling and retry policy.
  *
  * Provides functions to handle transport stalls during ORCHESTRATE or BUILD phases.
  * When a stall is detected:
  * 1. Check if repo is dirty
  * 2. Rollback if needed
  * 3. Return BLOCKED_TRANSPORT_STALLED with evidence
+ *
+ * Retry policy (M21):
+ * - Attempt 1: Retry same task unchanged
+ * - Attempt 2: Retry with degraded settings
+ * - Attempt 3+: Block and require human action
  */
 
 import type { TransportStallError, TransportStallStage } from '../types/preflight.js';
 import type { RollbackResultNew } from './rollback.js';
+import type { DiffLimits } from '../types/task.js';
 import { rollbackToCommit, verifyCleanWorktree } from './rollback.js';
 import { isWorktreeClean, getHeadCommit } from './git.js';
+
+/**
+ * Maximum retry attempts before blocking.
+ */
+export const MAX_RETRY_ATTEMPTS = 3;
+
+/**
+ * Action to take based on retry count.
+ */
+export type RetryAction = 'retry_unchanged' | 'retry_degraded' | 'block';
+
+/**
+ * Degraded settings applied on retry attempt 2.
+ */
+export interface DegradedSettings {
+  /** Reduced max_turns for builder (50% of original, minimum 5) */
+  max_turns: number;
+  /** Stricter diff limits (50% of original) */
+  diff_limits: DiffLimits;
+  /** Prefer patch mode if available */
+  prefer_patch_mode: boolean;
+}
+
+/**
+ * Result of computing retry action.
+ */
+export interface RetryDecision {
+  /** The action to take */
+  action: RetryAction;
+  /** Current retry count (after this attempt) */
+  retry_count: number;
+  /** Degraded settings if action is 'retry_degraded' */
+  degraded_settings?: DegradedSettings;
+  /** Human-readable reason for the decision */
+  reason: string;
+}
+
+/**
+ * Computes the retry action based on the current retry count.
+ *
+ * Retry policy:
+ * - retry_count 0 or 1 → retry_unchanged (first failure, try again)
+ * - retry_count 2 → retry_degraded (second failure, use safer settings)
+ * - retry_count >= 3 → block (third failure, require human)
+ *
+ * @param retryCount - Current retry count from state (before this attempt)
+ * @returns The action to take
+ */
+export function getRetryAction(retryCount: number): RetryAction {
+  if (retryCount < 1) {
+    return 'retry_unchanged';
+  } else if (retryCount < 2) {
+    return 'retry_degraded';
+  } else {
+    return 'block';
+  }
+}
+
+/**
+ * Computes the full retry decision including degraded settings if needed.
+ *
+ * @param retryCount - Current retry count from state
+ * @param originalMaxTurns - Original max_turns from config (default 50)
+ * @param originalDiffLimits - Original diff limits from config
+ * @returns Full retry decision with settings and reason
+ */
+export function computeRetryDecision(
+  retryCount: number,
+  originalMaxTurns: number = 50,
+  originalDiffLimits: DiffLimits = { max_files_touched: 20, max_lines_changed: 500 }
+): RetryDecision {
+  const action = getRetryAction(retryCount);
+  const newRetryCount = retryCount + 1;
+
+  if (action === 'retry_unchanged') {
+    return {
+      action,
+      retry_count: newRetryCount,
+      reason: `Retry attempt ${newRetryCount}/${MAX_RETRY_ATTEMPTS}: retrying unchanged`,
+    };
+  }
+
+  if (action === 'retry_degraded') {
+    const degraded_settings = computeDegradedSettings(originalMaxTurns, originalDiffLimits);
+    return {
+      action,
+      retry_count: newRetryCount,
+      degraded_settings,
+      reason: `Retry attempt ${newRetryCount}/${MAX_RETRY_ATTEMPTS}: retrying with degraded settings (max_turns=${degraded_settings.max_turns}, max_files=${degraded_settings.diff_limits.max_files_touched}, max_lines=${degraded_settings.diff_limits.max_lines_changed})`,
+    };
+  }
+
+  // action === 'block'
+  return {
+    action,
+    retry_count: newRetryCount,
+    reason: `Retry limit reached (${MAX_RETRY_ATTEMPTS} attempts). Blocking for human intervention.`,
+  };
+}
+
+/**
+ * Computes degraded settings for retry attempt 2.
+ *
+ * Applies conservative reductions:
+ * - max_turns: 50% of original, minimum 5
+ * - max_files_touched: 50% of original, minimum 5
+ * - max_lines_changed: 50% of original, minimum 100
+ * - prefer_patch_mode: true
+ *
+ * @param originalMaxTurns - Original max_turns from config
+ * @param originalDiffLimits - Original diff limits from config
+ * @returns Degraded settings
+ */
+export function computeDegradedSettings(
+  originalMaxTurns: number,
+  originalDiffLimits: DiffLimits
+): DegradedSettings {
+  return {
+    max_turns: Math.max(5, Math.floor(originalMaxTurns / 2)),
+    diff_limits: {
+      max_files_touched: Math.max(5, Math.floor(originalDiffLimits.max_files_touched / 2)),
+      max_lines_changed: Math.max(100, Math.floor(originalDiffLimits.max_lines_changed / 2)),
+    },
+    prefer_patch_mode: true,
+  };
+}
+
+/**
+ * Checks if retry is allowed based on current retry count.
+ *
+ * @param retryCount - Current retry count
+ * @returns true if retry is allowed, false if blocked
+ */
+export function canRetry(retryCount: number): boolean {
+  return retryCount < MAX_RETRY_ATTEMPTS - 1;
+}
+
+/**
+ * Formats retry decision as human-readable message.
+ *
+ * @param decision - The retry decision
+ * @returns Formatted message
+ */
+export function formatRetryDecision(decision: RetryDecision): string {
+  const lines = [decision.reason];
+
+  if (decision.degraded_settings) {
+    lines.push('Degraded settings:');
+    lines.push(`  - max_turns: ${decision.degraded_settings.max_turns}`);
+    lines.push(`  - max_files: ${decision.degraded_settings.diff_limits.max_files_touched}`);
+    lines.push(`  - max_lines: ${decision.degraded_settings.diff_limits.max_lines_changed}`);
+    lines.push(`  - patch_mode: ${decision.degraded_settings.prefer_patch_mode}`);
+  }
+
+  if (decision.action === 'block') {
+    lines.push('');
+    lines.push('Human action required: Review logs, fix issues, then reset retry state.');
+  }
+
+  return lines.join('\n');
+}
 
 /**
  * Result of handling a transport stall.

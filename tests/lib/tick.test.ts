@@ -1,5 +1,5 @@
 /**
- * Tests for src/lib/tick.ts - Tick runner stall handling.
+ * Tests for src/lib/tick.ts - Tick runner stall handling and retry policy.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -7,6 +7,12 @@ import {
   handleTransportStall,
   checkAndHandleStall,
   formatStallResult,
+  getRetryAction,
+  computeRetryDecision,
+  computeDegradedSettings,
+  canRetry,
+  formatRetryDecision,
+  MAX_RETRY_ATTEMPTS,
   type StallHandlingResult,
 } from '@/lib/tick.js';
 import { createTransportStallError } from '@/lib/transport.js';
@@ -271,5 +277,149 @@ describe('formatStallResult', () => {
 
     expect(formatted).toContain('...');
     expect(formatted.length).toBeLessThan(result.rawError.length + 200);
+  });
+});
+
+describe('getRetryAction', () => {
+  it('should return retry_unchanged for retry_count 0', () => {
+    expect(getRetryAction(0)).toBe('retry_unchanged');
+  });
+
+  it('should return retry_degraded for retry_count 1', () => {
+    expect(getRetryAction(1)).toBe('retry_degraded');
+  });
+
+  it('should return block for retry_count 2', () => {
+    expect(getRetryAction(2)).toBe('block');
+  });
+
+  it('should return block for retry_count 3 or higher', () => {
+    expect(getRetryAction(3)).toBe('block');
+    expect(getRetryAction(10)).toBe('block');
+  });
+});
+
+describe('computeDegradedSettings', () => {
+  it('should reduce max_turns by 50%', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+    expect(settings.max_turns).toBe(25);
+  });
+
+  it('should enforce minimum max_turns of 5', () => {
+    const settings = computeDegradedSettings(6, { max_files_touched: 20, max_lines_changed: 500 });
+    expect(settings.max_turns).toBe(5);
+  });
+
+  it('should reduce max_files_touched by 50%', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+    expect(settings.diff_limits.max_files_touched).toBe(10);
+  });
+
+  it('should enforce minimum max_files_touched of 5', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 6, max_lines_changed: 500 });
+    expect(settings.diff_limits.max_files_touched).toBe(5);
+  });
+
+  it('should reduce max_lines_changed by 50%', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+    expect(settings.diff_limits.max_lines_changed).toBe(250);
+  });
+
+  it('should enforce minimum max_lines_changed of 100', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 100 });
+    expect(settings.diff_limits.max_lines_changed).toBe(100);
+  });
+
+  it('should set prefer_patch_mode to true', () => {
+    const settings = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+    expect(settings.prefer_patch_mode).toBe(true);
+  });
+});
+
+describe('computeRetryDecision', () => {
+  it('should return retry_unchanged for first failure', () => {
+    const decision = computeRetryDecision(0);
+
+    expect(decision.action).toBe('retry_unchanged');
+    expect(decision.retry_count).toBe(1);
+    expect(decision.degraded_settings).toBeUndefined();
+    expect(decision.reason).toContain('retry');
+  });
+
+  it('should return retry_degraded for second failure with settings', () => {
+    const decision = computeRetryDecision(1, 50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    expect(decision.action).toBe('retry_degraded');
+    expect(decision.retry_count).toBe(2);
+    expect(decision.degraded_settings).toBeDefined();
+    expect(decision.degraded_settings?.max_turns).toBe(25);
+    expect(decision.reason).toContain('degraded');
+  });
+
+  it('should return block for third failure', () => {
+    const decision = computeRetryDecision(2);
+
+    expect(decision.action).toBe('block');
+    expect(decision.retry_count).toBe(3);
+    expect(decision.degraded_settings).toBeUndefined();
+    expect(decision.reason).toContain('limit');
+  });
+
+  it('should use default values if not provided', () => {
+    const decision = computeRetryDecision(1);
+
+    expect(decision.degraded_settings?.max_turns).toBe(25); // default 50 / 2
+    expect(decision.degraded_settings?.diff_limits.max_files_touched).toBe(10); // default 20 / 2
+  });
+});
+
+describe('canRetry', () => {
+  it('should return true for retry_count 0', () => {
+    expect(canRetry(0)).toBe(true);
+  });
+
+  it('should return true for retry_count 1', () => {
+    expect(canRetry(1)).toBe(true);
+  });
+
+  it('should return false for retry_count 2', () => {
+    expect(canRetry(2)).toBe(false);
+  });
+
+  it('should return false for retry_count 3 or higher', () => {
+    expect(canRetry(3)).toBe(false);
+    expect(canRetry(10)).toBe(false);
+  });
+});
+
+describe('formatRetryDecision', () => {
+  it('should format retry_unchanged decision', () => {
+    const decision = computeRetryDecision(0);
+    const formatted = formatRetryDecision(decision);
+
+    expect(formatted).toContain('Retry attempt 1/3');
+  });
+
+  it('should include degraded settings for retry_degraded', () => {
+    const decision = computeRetryDecision(1, 50, { max_files_touched: 20, max_lines_changed: 500 });
+    const formatted = formatRetryDecision(decision);
+
+    expect(formatted).toContain('Degraded settings');
+    expect(formatted).toContain('max_turns: 25');
+    expect(formatted).toContain('max_files: 10');
+    expect(formatted).toContain('max_lines: 250');
+  });
+
+  it('should include human action message for block', () => {
+    const decision = computeRetryDecision(2);
+    const formatted = formatRetryDecision(decision);
+
+    expect(formatted).toContain('Human action required');
+  });
+});
+
+describe('MAX_RETRY_ATTEMPTS', () => {
+  it('should be 3', () => {
+    expect(MAX_RETRY_ATTEMPTS).toBe(3);
   });
 });
