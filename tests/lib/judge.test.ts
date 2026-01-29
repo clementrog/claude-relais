@@ -6,6 +6,7 @@ import {
   parseGitDiffStat,
   computeBlastRadius,
   checkDiffLimits,
+  checkHeadMoved,
 } from '@/lib/judge.js';
 import { execSync } from 'node:child_process';
 import type { TaskScope, DiffLimits } from '@/types/task.js';
@@ -825,5 +826,88 @@ describe('checkDiffLimits', () => {
 
     expect(result.ok).toBe(false);
     expect(result.stopCode).toBe('STOP_DIFF_TOO_LARGE');
+  });
+});
+
+describe('checkHeadMoved', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return ok when HEAD unchanged (HEAD === expectedBaseCommit)', () => {
+    const expectedBase = 'abc123def456';
+    vi.mocked(execSync).mockReturnValueOnce(expectedBase + '\n');
+
+    const result = checkHeadMoved(expectedBase);
+
+    expect(result.ok).toBe(true);
+    expect(result.stopCode).toBeNull();
+    expect(result.expectedHead).toBe(expectedBase);
+    expect(result.actualHead).toBe(expectedBase);
+    expect(result.reason).toBeNull();
+    expect(execSync).toHaveBeenCalledTimes(1);
+    expect(execSync).toHaveBeenCalledWith('git rev-parse HEAD', expect.any(Object));
+  });
+
+  it('should return ok when HEAD is descendant of base (builder made commits)', () => {
+    const expectedBase = 'abc123';
+    const actualHead = 'def456';
+    vi.mocked(execSync)
+      .mockReturnValueOnce(actualHead + '\n')
+      .mockReturnValueOnce(''); // merge-base --is-ancestor succeeds (no output, exit 0)
+
+    const result = checkHeadMoved(expectedBase);
+
+    expect(result.ok).toBe(true);
+    expect(result.stopCode).toBeNull();
+    expect(result.expectedHead).toBe(expectedBase);
+    expect(result.actualHead).toBe(actualHead);
+    expect(result.reason).toBeNull();
+    expect(execSync).toHaveBeenCalledTimes(2);
+    expect(execSync).toHaveBeenNthCalledWith(1, 'git rev-parse HEAD', expect.any(Object));
+    expect(execSync).toHaveBeenNthCalledWith(
+      2,
+      `git merge-base --is-ancestor ${expectedBase} HEAD`,
+      expect.any(Object)
+    );
+  });
+
+  it('should return STOP_HEAD_MOVED when HEAD moved externally', () => {
+    const expectedBase = 'abc123';
+    const actualHead = 'other789';
+    vi.mocked(execSync)
+      .mockReturnValueOnce(actualHead + '\n')
+      .mockImplementationOnce(() => {
+        throw new Error('merge-base failed');
+      });
+
+    const result = checkHeadMoved(expectedBase);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_HEAD_MOVED');
+    expect(result.expectedHead).toBe(expectedBase);
+    expect(result.actualHead).toBe(actualHead);
+    expect(result.reason).toContain('HEAD moved externally');
+    expect(result.reason).toContain(expectedBase);
+    expect(result.reason).toContain(actualHead);
+  });
+
+  it('should return STOP_HEAD_MOVED when git rev-parse fails', () => {
+    const expectedBase = 'abc123';
+    vi.mocked(execSync).mockImplementationOnce(() => {
+      throw new Error('not a git repository');
+    });
+
+    const result = checkHeadMoved(expectedBase);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_HEAD_MOVED');
+    expect(result.expectedHead).toBe(expectedBase);
+    expect(result.actualHead).toBe('');
+    expect(result.reason).toContain('Failed to get current HEAD');
   });
 });

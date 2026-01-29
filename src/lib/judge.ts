@@ -546,3 +546,80 @@ export function checkDiffLimits(blastRadius: BlastRadius, limits: DiffLimits): D
     reason: null,
   };
 }
+
+/**
+ * Result of HEAD-moved check (JUDGE phase).
+ * Detects if HEAD was moved externally during a tick (e.g. force push, external commit).
+ */
+export interface HeadCheckResult {
+  /** True if HEAD is still at expected commit or a descendant of it */
+  ok: boolean;
+  /** 'STOP_HEAD_MOVED' if HEAD was moved externally, null otherwise */
+  stopCode: 'STOP_HEAD_MOVED' | null;
+  /** The base commit we expected (stored at tick start) */
+  expectedHead: string;
+  /** Current HEAD commit SHA */
+  actualHead: string;
+  /** Human-readable reason when not ok */
+  reason: string | null;
+}
+
+/**
+ * Checks if HEAD is still at the expected commit (or a descendant of it).
+ *
+ * - If HEAD === expectedBaseCommit → ok (no changes yet).
+ * - If expectedBaseCommit is ancestor of HEAD → ok (builder made commits).
+ * - Otherwise → HEAD was moved externally (force push, external commit, branch switch) → STOP_HEAD_MOVED.
+ *
+ * @param expectedBaseCommit - The base commit SHA stored at tick start
+ * @returns HeadCheckResult with ok, stopCode, expectedHead, actualHead, reason
+ */
+export function checkHeadMoved(expectedBaseCommit: string): HeadCheckResult {
+  let actualHead: string;
+  try {
+    actualHead = execSync('git rev-parse HEAD', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    return {
+      ok: false,
+      stopCode: 'STOP_HEAD_MOVED',
+      expectedHead: expectedBaseCommit,
+      actualHead: '',
+      reason: `Failed to get current HEAD: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  if (actualHead === expectedBaseCommit) {
+    return {
+      ok: true,
+      stopCode: null,
+      expectedHead: expectedBaseCommit,
+      actualHead,
+      reason: null,
+    };
+  }
+
+  try {
+    execSync(`git merge-base --is-ancestor ${expectedBaseCommit} HEAD`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return {
+      ok: true,
+      stopCode: null,
+      expectedHead: expectedBaseCommit,
+      actualHead,
+      reason: null,
+    };
+  } catch {
+    return {
+      ok: false,
+      stopCode: 'STOP_HEAD_MOVED',
+      expectedHead: expectedBaseCommit,
+      actualHead,
+      reason: `HEAD moved externally: expected ${expectedBaseCommit}, got ${actualHead}`,
+    };
+  }
+}
