@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseGitDiffNameStatus, getTouchedFiles } from '@/lib/judge.js';
+import { parseGitDiffNameStatus, getTouchedFiles, checkScopeViolations } from '@/lib/judge.js';
 import { execSync } from 'node:child_process';
+import type { TaskScope } from '@/types/task.js';
+import type { ScopeConfig } from '@/types/config.js';
 
 // Mock execSync
 vi.mock('node:child_process', () => ({
@@ -270,5 +272,270 @@ describe('getTouchedFiles', () => {
     expect(result.renamed).toEqual([{ from: 'old.ts', to: 'new.ts' }]);
     expect(result.all).toEqual(['new.ts']);
     expect(result.all).not.toContain('old.ts');
+  });
+});
+
+describe('checkScopeViolations', () => {
+  const defaultTaskScope: TaskScope = {
+    allowed_globs: ['src/**'],
+    forbidden_globs: ['*.key', '*.pem'],
+    allow_new_files: true,
+    allow_lockfile_changes: true,
+  };
+
+  const defaultScopeConfig: ScopeConfig = {
+    lockfiles: ['package-lock.json', 'yarn.lock'],
+    default_allowed_globs: [],
+    default_forbidden_globs: [],
+    default_allow_new_files: true,
+    default_allow_lockfile_changes: false,
+  };
+
+  const defaultRunnerOwnedGlobs = ['pilot/**', 'relais.config.json'];
+
+  it('should return ok=true when no violations', () => {
+    const touched = {
+      modified: ['src/utils.ts'],
+      added: ['src/new.ts'],
+      deleted: [],
+      renamed: [],
+      untracked: ['src/new.ts'],
+      all: ['src/utils.ts', 'src/new.ts'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(true);
+    expect(result.stopCode).toBeNull();
+    expect(result.violatingFiles).toEqual([]);
+    expect(result.reason).toBeNull();
+  });
+
+  it('should detect STOP_RUNNER_OWNED_MUTATION (highest priority)', () => {
+    const touched = {
+      modified: ['src/utils.ts', 'pilot/STATE.json'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['src/utils.ts', 'pilot/STATE.json'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_RUNNER_OWNED_MUTATION');
+    expect(result.violatingFiles).toEqual(['pilot/STATE.json']);
+    expect(result.reason).toContain('runner-owned globs');
+  });
+
+  it('should detect STOP_SCOPE_VIOLATION_FORBIDDEN', () => {
+    const touched = {
+      modified: ['src/utils.ts', 'secret.key'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['src/utils.ts', 'secret.key'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_SCOPE_VIOLATION_FORBIDDEN');
+    expect(result.violatingFiles).toEqual(['secret.key']);
+    expect(result.reason).toContain('forbidden glob');
+  });
+
+  it('should detect STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED', () => {
+    const touched = {
+      modified: ['src/utils.ts', 'other/file.ts'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['src/utils.ts', 'other/file.ts'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED');
+    expect(result.violatingFiles).toEqual(['other/file.ts']);
+    expect(result.reason).toContain('allowed glob');
+  });
+
+  it('should not check allowed globs when allowed_globs is empty', () => {
+    const taskScope: TaskScope = {
+      allowed_globs: [],
+      forbidden_globs: [],
+      allow_new_files: true,
+      allow_lockfile_changes: true,
+    };
+
+    const touched = {
+      modified: ['any/file.ts'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['any/file.ts'],
+    };
+
+    const result = checkScopeViolations(touched, taskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('should detect STOP_SCOPE_VIOLATION_NEW_FILE', () => {
+    const taskScope: TaskScope = {
+      ...defaultTaskScope,
+      allow_new_files: false,
+    };
+
+    const touched = {
+      modified: ['src/utils.ts'],
+      added: ['src/new.ts'],
+      deleted: [],
+      renamed: [],
+      untracked: ['src/new.ts'],
+      all: ['src/utils.ts', 'src/new.ts'],
+    };
+
+    const result = checkScopeViolations(touched, taskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_SCOPE_VIOLATION_NEW_FILE');
+    expect(result.violatingFiles).toEqual(['src/new.ts']);
+    expect(result.reason).toContain('allow_new_files is false');
+  });
+
+  it('should detect new files from renamed files', () => {
+    const taskScope: TaskScope = {
+      allowed_globs: ['src/**', 'new.ts'],
+      forbidden_globs: [],
+      allow_new_files: false,
+      allow_lockfile_changes: true,
+    };
+
+    const touched = {
+      modified: [],
+      added: [],
+      deleted: [],
+      renamed: [{ from: 'old.ts', to: 'new.ts' }],
+      untracked: [],
+      all: ['new.ts'],
+    };
+
+    const result = checkScopeViolations(touched, taskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_SCOPE_VIOLATION_NEW_FILE');
+    expect(result.violatingFiles).toEqual(['new.ts']);
+  });
+
+  it('should detect STOP_LOCKFILE_CHANGE_FORBIDDEN', () => {
+    const taskScope: TaskScope = {
+      allowed_globs: ['src/**', 'package-lock.json'],
+      forbidden_globs: [],
+      allow_new_files: true,
+      allow_lockfile_changes: false,
+    };
+
+    const touched = {
+      modified: ['src/utils.ts', 'package-lock.json'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['src/utils.ts', 'package-lock.json'],
+    };
+
+    const result = checkScopeViolations(touched, taskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_LOCKFILE_CHANGE_FORBIDDEN');
+    expect(result.violatingFiles).toEqual(['package-lock.json']);
+    expect(result.reason).toContain('allow_lockfile_changes is false');
+  });
+
+  it('should check priority order - runner-owned takes precedence over forbidden', () => {
+    const touched = {
+      modified: ['pilot/STATE.json', 'secret.key'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['pilot/STATE.json', 'secret.key'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_RUNNER_OWNED_MUTATION');
+    expect(result.violatingFiles).toEqual(['pilot/STATE.json']);
+  });
+
+  it('should return multiple violating files for same violation type', () => {
+    const touched = {
+      modified: ['secret1.key', 'secret2.key'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['secret1.key', 'secret2.key'],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_SCOPE_VIOLATION_FORBIDDEN');
+    expect(result.violatingFiles).toEqual(['secret1.key', 'secret2.key']);
+  });
+
+  it('should handle empty touched files', () => {
+    const touched = {
+      modified: [],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: [],
+    };
+
+    const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(true);
+    expect(result.stopCode).toBeNull();
+    expect(result.violatingFiles).toEqual([]);
+  });
+
+  it('should handle lockfile glob patterns', () => {
+    const scopeConfig: ScopeConfig = {
+      ...defaultScopeConfig,
+      lockfiles: ['**/package-lock.json', 'yarn.lock'],
+    };
+
+    const taskScope: TaskScope = {
+      allowed_globs: ['**/package-lock.json'],
+      forbidden_globs: [],
+      allow_new_files: true,
+      allow_lockfile_changes: false,
+    };
+
+    const touched = {
+      modified: ['subdir/package-lock.json'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['subdir/package-lock.json'],
+    };
+
+    const result = checkScopeViolations(touched, taskScope, scopeConfig, defaultRunnerOwnedGlobs);
+
+    expect(result.ok).toBe(false);
+    expect(result.stopCode).toBe('STOP_LOCKFILE_CHANGE_FORBIDDEN');
+    expect(result.violatingFiles).toEqual(['subdir/package-lock.json']);
   });
 });

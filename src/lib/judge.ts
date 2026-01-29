@@ -6,6 +6,10 @@
  */
 
 import { execSync } from 'node:child_process';
+import micromatch from 'micromatch';
+import type { TaskScope } from '../types/task.js';
+import type { ScopeConfig } from '../types/config.js';
+import type { ReportCode } from '../types/report.js';
 
 /**
  * Categorized list of files touched since a base commit.
@@ -178,5 +182,192 @@ export function getTouchedFiles(baseCommit: string): TouchedFiles {
     renamed: diffStatus.renamed,
     untracked,
     all,
+  };
+}
+
+/**
+ * Result of scope violation checking.
+ */
+export interface ScopeCheckResult {
+  /** True if no violations found */
+  ok: boolean;
+  /** Stop code if violation found, null otherwise */
+  stopCode: ReportCode | null;
+  /** List of file paths that caused the violation */
+  violatingFiles: string[];
+  /** Human-readable reason for the violation */
+  reason: string | null;
+}
+
+/**
+ * Checks if a path matches any of the given glob patterns.
+ *
+ * @param path - The file path to check
+ * @param patterns - Array of glob patterns to match against
+ * @returns True if path matches any pattern, false otherwise
+ */
+function matchesGlob(path: string, patterns: string[]): boolean {
+  if (patterns.length === 0) {
+    return false;
+  }
+  return micromatch.isMatch(path, patterns);
+}
+
+/**
+ * Checks if a path is a lockfile based on scopeConfig.lockfiles list.
+ *
+ * @param path - The file path to check
+ * @param lockfiles - Array of lockfile names/patterns
+ * @returns True if path matches any lockfile pattern
+ */
+function isLockfile(path: string, lockfiles: string[]): boolean {
+  if (lockfiles.length === 0) {
+    return false;
+  }
+  // Check if path ends with any lockfile name, or matches lockfile globs
+  return lockfiles.some((lockfile) => {
+    // If lockfile is a simple name (e.g., "package-lock.json"), check if path ends with it
+    if (!lockfile.includes('/') && !lockfile.includes('*')) {
+      return path.endsWith(lockfile);
+    }
+    // Otherwise, treat as glob pattern
+    return micromatch.isMatch(path, [lockfile]);
+  });
+}
+
+/**
+ * Checks touched files against scope rules and returns first violation or success.
+ *
+ * Checks are performed in priority order:
+ * 1. Runner-owned mutation (highest priority)
+ * 2. Forbidden globs
+ * 3. Outside allowed globs
+ * 4. New file when not allowed
+ * 5. Lockfile change when not allowed
+ *
+ * Returns the first violation found, or success if no violations.
+ *
+ * @param touched - TouchedFiles object with categorized file lists
+ * @param taskScope - Task scope configuration with allowed/forbidden globs and permissions
+ * @param scopeConfig - Scope configuration with lockfiles list
+ * @param runnerOwnedGlobs - Glob patterns for files owned by the runner
+ * @returns ScopeCheckResult with stopCode and violatingFiles
+ *
+ * @example
+ * ```typescript
+ * const result = checkScopeViolations(
+ *   { modified: ['src/utils.ts'], added: ['src/new.ts'], deleted: [], renamed: [], untracked: ['src/new.ts'], all: ['src/utils.ts', 'src/new.ts'] },
+ *   { allowed_globs: ['src/**'], forbidden_globs: ['*.key'], allow_new_files: false, allow_lockfile_changes: true },
+ *   { lockfiles: ['package-lock.json'], default_allowed_globs: [], default_forbidden_globs: [], default_allow_new_files: true, default_allow_lockfile_changes: false },
+ *   ['pilot/**']
+ * );
+ * if (!result.ok) {
+ *   console.error(`Violation: ${result.stopCode}`, result.violatingFiles);
+ * }
+ * ```
+ */
+export function checkScopeViolations(
+  touched: TouchedFiles,
+  taskScope: TaskScope,
+  scopeConfig: ScopeConfig,
+  runnerOwnedGlobs: string[]
+): ScopeCheckResult {
+  // Get all touched paths (excluding deleted files)
+  const allPaths = touched.all;
+  const untrackedSet = new Set(touched.untracked);
+  const newFilesSet = new Set([...touched.added, ...touched.untracked, ...touched.renamed.map((r) => r.to)]);
+
+  // Check 1: Runner-owned mutation (highest priority)
+  const runnerOwnedViolations: string[] = [];
+  for (const path of allPaths) {
+    if (matchesGlob(path, runnerOwnedGlobs)) {
+      runnerOwnedViolations.push(path);
+    }
+  }
+  if (runnerOwnedViolations.length > 0) {
+    return {
+      ok: false,
+      stopCode: 'STOP_RUNNER_OWNED_MUTATION',
+      violatingFiles: runnerOwnedViolations,
+      reason: `Files match runner-owned globs: ${runnerOwnedViolations.join(', ')}`,
+    };
+  }
+
+  // Check 2: Forbidden globs
+  const forbiddenViolations: string[] = [];
+  for (const path of allPaths) {
+    if (matchesGlob(path, taskScope.forbidden_globs)) {
+      forbiddenViolations.push(path);
+    }
+  }
+  if (forbiddenViolations.length > 0) {
+    return {
+      ok: false,
+      stopCode: 'STOP_SCOPE_VIOLATION_FORBIDDEN',
+      violatingFiles: forbiddenViolations,
+      reason: `Files match forbidden glob patterns: ${forbiddenViolations.join(', ')}`,
+    };
+  }
+
+  // Check 3: Outside allowed globs
+  if (taskScope.allowed_globs.length > 0) {
+    const outsideAllowedViolations: string[] = [];
+    for (const path of allPaths) {
+      if (!matchesGlob(path, taskScope.allowed_globs)) {
+        outsideAllowedViolations.push(path);
+      }
+    }
+    if (outsideAllowedViolations.length > 0) {
+      return {
+        ok: false,
+        stopCode: 'STOP_SCOPE_VIOLATION_OUTSIDE_ALLOWED',
+        violatingFiles: outsideAllowedViolations,
+        reason: `Files do not match any allowed glob pattern: ${outsideAllowedViolations.join(', ')}`,
+      };
+    }
+  }
+
+  // Check 4: New file when not allowed
+  if (!taskScope.allow_new_files) {
+    const newFileViolations: string[] = [];
+    for (const path of allPaths) {
+      if (newFilesSet.has(path)) {
+        newFileViolations.push(path);
+      }
+    }
+    if (newFileViolations.length > 0) {
+      return {
+        ok: false,
+        stopCode: 'STOP_SCOPE_VIOLATION_NEW_FILE',
+        violatingFiles: newFileViolations,
+        reason: `New files created but allow_new_files is false: ${newFileViolations.join(', ')}`,
+      };
+    }
+  }
+
+  // Check 5: Lockfile change when not allowed
+  if (!taskScope.allow_lockfile_changes) {
+    const lockfileViolations: string[] = [];
+    for (const path of allPaths) {
+      if (isLockfile(path, scopeConfig.lockfiles)) {
+        lockfileViolations.push(path);
+      }
+    }
+    if (lockfileViolations.length > 0) {
+      return {
+        ok: false,
+        stopCode: 'STOP_LOCKFILE_CHANGE_FORBIDDEN',
+        violatingFiles: lockfileViolations,
+        reason: `Lockfiles modified but allow_lockfile_changes is false: ${lockfileViolations.join(', ')}`,
+      };
+    }
+  }
+
+  // No violations found
+  return {
+    ok: true,
+    stopCode: null,
+    violatingFiles: [],
+    reason: null,
   };
 }
