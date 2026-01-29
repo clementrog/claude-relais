@@ -195,3 +195,84 @@ export async function invokeWithStallDetection(
     throw error;
   }
 }
+
+/**
+ * Result of normalizing an error for transport stall detection.
+ */
+export interface NormalizedError {
+  /** Whether this error represents a transport stall */
+  isStall: boolean;
+  /** Structured stall error if isStall is true */
+  stallError: TransportStallError | null;
+  /** The original error wrapped as Error */
+  originalError: Error;
+  /** Raw error message extracted from the error */
+  message: string;
+}
+
+/**
+ * Normalizes any error type into a consistent format for stall detection.
+ *
+ * Handles:
+ * - ClaudeError: extracts message + stderr, checks for timeout
+ * - Error: extracts message
+ * - string: wraps in Error
+ * - unknown: converts to string and wraps in Error
+ *
+ * @param error - Any error type (ClaudeError, Error, string, unknown)
+ * @param stage - The stage where the error occurred (ORCHESTRATE or BUILD)
+ * @returns Normalized error with stall detection result
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   await invokeClaudeCode(config, invocation);
+ * } catch (error) {
+ *   const normalized = normalizeTransportError(error, 'BUILD');
+ *   if (normalized.isStall) {
+ *     handleStall(normalized.stallError);
+ *   } else {
+ *     throw normalized.originalError;
+ *   }
+ * }
+ * ```
+ */
+export function normalizeTransportError(
+  error: unknown,
+  stage: TransportStallStage
+): NormalizedError {
+  let message: string;
+  let originalError: Error;
+  let isTimeout = false;
+
+  // Handle different error types
+  if (error instanceof ClaudeError) {
+    message = error.message + (error.stderr ? `\n${error.stderr}` : '');
+    originalError = error;
+    isTimeout = error.exitCode === 124 || error.message.includes('timed out');
+  } else if (error instanceof Error) {
+    message = error.message;
+    originalError = error;
+  } else if (typeof error === 'string') {
+    message = error;
+    originalError = new Error(error);
+  } else {
+    message = String(error);
+    originalError = new Error(message);
+  }
+
+  // Check for stall patterns
+  const stallCheck = isTransportStall(message);
+
+  // Determine if this is a stall
+  const isStall = isTimeout || stallCheck.stalled;
+
+  return {
+    isStall,
+    stallError: isStall
+      ? createTransportStallError(stage, message, stallCheck.request_id)
+      : null,
+    originalError,
+    message,
+  };
+}

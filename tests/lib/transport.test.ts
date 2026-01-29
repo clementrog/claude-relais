@@ -7,8 +7,10 @@ import {
   isTransportStall,
   createTransportStallError,
   invokeWithStallDetection,
+  normalizeTransportError,
   type StallDetectionResult,
   type InvokeResult,
+  type NormalizedError,
 } from '@/lib/transport.js';
 import { ClaudeError } from '@/types/claude.js';
 
@@ -234,5 +236,123 @@ describe('invokeWithStallDetection', () => {
       expect(result.error.kind).toBe('transport_stalled');
       expect(result.error.raw_error).toContain('streamFromAgentBackend');
     }
+  });
+});
+
+describe('normalizeTransportError', () => {
+  it('should handle ClaudeError with stall pattern in stderr', () => {
+    const error = new ClaudeError('Process failed', 1, 'Connection stalled. Request ID: req-123');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(true);
+    expect(result.stallError).not.toBeNull();
+    expect(result.stallError?.kind).toBe('transport_stalled');
+    expect(result.stallError?.stage).toBe('BUILD');
+    expect(result.stallError?.request_id).toBe('req-123');
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should handle ClaudeError with timeout exit code', () => {
+    const error = new ClaudeError('Command timed out', 124, '');
+    const result = normalizeTransportError(error, 'ORCHESTRATE');
+
+    expect(result.isStall).toBe(true);
+    expect(result.stallError).not.toBeNull();
+    expect(result.stallError?.stage).toBe('ORCHESTRATE');
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should handle ClaudeError with "timed out" in message', () => {
+    const error = new ClaudeError('Claude invocation timed out after 30000ms', 1, '');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(true);
+    expect(result.stallError).not.toBeNull();
+  });
+
+  it('should handle ClaudeError without stall pattern', () => {
+    const error = new ClaudeError('Invalid JSON', 1, 'Parsing error');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBe(error);
+    expect(result.message).toContain('Invalid JSON');
+    expect(result.message).toContain('Parsing error');
+  });
+
+  it('should handle regular Error with stall pattern', () => {
+    const error = new Error('ECONNRESET during connection');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(true);
+    expect(result.stallError).not.toBeNull();
+    expect(result.stallError?.raw_error).toContain('ECONNRESET');
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should handle regular Error without stall pattern', () => {
+    const error = new Error('File not found');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should handle string error with stall pattern', () => {
+    const error = 'Connection stalled while waiting';
+    const result = normalizeTransportError(error, 'ORCHESTRATE');
+
+    expect(result.isStall).toBe(true);
+    expect(result.stallError).not.toBeNull();
+    expect(result.stallError?.stage).toBe('ORCHESTRATE');
+    expect(result.originalError).toBeInstanceOf(Error);
+    expect(result.originalError.message).toBe(error);
+  });
+
+  it('should handle string error without stall pattern', () => {
+    const error = 'Some random error';
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBeInstanceOf(Error);
+    expect(result.originalError.message).toBe(error);
+  });
+
+  it('should handle unknown error types', () => {
+    const error = { code: 500, reason: 'Unknown' };
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBeInstanceOf(Error);
+    // String({ code: 500, reason: 'Unknown' }) returns '[object Object]'
+    expect(result.message).toBe('[object Object]');
+  });
+
+  it('should handle null error', () => {
+    const result = normalizeTransportError(null, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBeInstanceOf(Error);
+  });
+
+  it('should handle undefined error', () => {
+    const result = normalizeTransportError(undefined, 'BUILD');
+
+    expect(result.isStall).toBe(false);
+    expect(result.stallError).toBeNull();
+    expect(result.originalError).toBeInstanceOf(Error);
+  });
+
+  it('should combine message and stderr from ClaudeError', () => {
+    const error = new ClaudeError('Main message', 1, 'Stderr content');
+    const result = normalizeTransportError(error, 'BUILD');
+
+    expect(result.message).toContain('Main message');
+    expect(result.message).toContain('Stderr content');
   });
 });

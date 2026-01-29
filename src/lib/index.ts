@@ -181,3 +181,13 @@ export {
   type MergeEligibility,
   type MergeEligibilityReport,
 } from './guardrails.js';
+
+export {
+  isTransportStall,
+  createTransportStallError,
+  invokeWithStallDetection,
+  normalizeTransportError,
+  type StallDetectionResult,
+  type InvokeResult,
+  type NormalizedError,
+} from './transport.js';
