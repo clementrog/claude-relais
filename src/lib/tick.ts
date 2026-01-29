@@ -16,6 +16,7 @@
 import type { TransportStallError, TransportStallStage } from '../types/preflight.js';
 import type { RollbackResultNew } from './rollback.js';
 import type { DiffLimits } from '../types/task.js';
+import type { RelaisConfig } from '../types/config.js';
 import { rollbackToCommit, verifyCleanWorktree } from './rollback.js';
 import { isWorktreeClean, getHeadCommit } from './git.js';
 
@@ -178,6 +179,92 @@ export function formatRetryDecision(decision: RetryDecision): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * Applies degraded settings to a RelaisConfig.
+ *
+ * Used during retry attempt 2 to run with more conservative settings.
+ * Creates a new config object without mutating the original.
+ *
+ * Settings applied:
+ * - builder.claude_code.max_turns: reduced to degraded value
+ * - diff_limits.default_max_files_touched: reduced to degraded value
+ * - diff_limits.default_max_lines_changed: reduced to degraded value
+ * - builder.default_mode: set to 'patch' if allow_patch_mode is true and prefer_patch_mode is set
+ *
+ * @param config - Original RelaisConfig
+ * @param degraded - Degraded settings to apply
+ * @returns New config with degraded settings applied
+ */
+export function applyDegradedConfig(
+  config: RelaisConfig,
+  degraded: DegradedSettings
+): RelaisConfig {
+  return {
+    ...config,
+    builder: {
+      ...config.builder,
+      // Prefer patch mode if available and degraded settings request it
+      default_mode:
+        degraded.prefer_patch_mode && config.builder.allow_patch_mode
+          ? 'patch'
+          : config.builder.default_mode,
+      claude_code: {
+        ...config.builder.claude_code,
+        max_turns: degraded.max_turns,
+      },
+    },
+    diff_limits: {
+      ...config.diff_limits,
+      default_max_files_touched: degraded.diff_limits.max_files_touched,
+      default_max_lines_changed: degraded.diff_limits.max_lines_changed,
+    },
+  };
+}
+
+/**
+ * Extracts relevant settings from config for computing degraded settings.
+ *
+ * @param config - RelaisConfig to extract from
+ * @returns Object with max_turns and diff_limits for degradation computation
+ */
+export function extractDegradationInputs(config: RelaisConfig): {
+  max_turns: number;
+  diff_limits: DiffLimits;
+} {
+  return {
+    max_turns: config.builder.claude_code.max_turns,
+    diff_limits: {
+      max_files_touched: config.diff_limits.default_max_files_touched,
+      max_lines_changed: config.diff_limits.default_max_lines_changed,
+    },
+  };
+}
+
+/**
+ * Convenience function to degrade a config based on retry count.
+ *
+ * If retry action is 'retry_degraded', applies degraded settings to config.
+ * Otherwise, returns the original config unchanged.
+ *
+ * @param config - Original config
+ * @param retryCount - Current retry count
+ * @returns Degraded config if appropriate, original config otherwise
+ */
+export function getDegradedConfigIfNeeded(
+  config: RelaisConfig,
+  retryCount: number
+): RelaisConfig {
+  const action = getRetryAction(retryCount);
+
+  if (action !== 'retry_degraded') {
+    return config;
+  }
+
+  const inputs = extractDegradationInputs(config);
+  const degraded = computeDegradedSettings(inputs.max_turns, inputs.diff_limits);
+  return applyDegradedConfig(config, degraded);
 }
 
 /**

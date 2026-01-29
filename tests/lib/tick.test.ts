@@ -10,6 +10,9 @@ import {
   getRetryAction,
   computeRetryDecision,
   computeDegradedSettings,
+  applyDegradedConfig,
+  extractDegradationInputs,
+  getDegradedConfigIfNeeded,
   canRetry,
   formatRetryDecision,
   MAX_RETRY_ATTEMPTS,
@@ -17,6 +20,7 @@ import {
 } from '@/lib/tick.js';
 import { createTransportStallError } from '@/lib/transport.js';
 import type { TransportStallError } from '@/types/preflight.js';
+import type { RelaisConfig } from '@/types/config.js';
 
 // Mock git and rollback modules
 vi.mock('@/lib/git.js', () => ({
@@ -421,5 +425,209 @@ describe('formatRetryDecision', () => {
 describe('MAX_RETRY_ATTEMPTS', () => {
   it('should be 3', () => {
     expect(MAX_RETRY_ATTEMPTS).toBe(3);
+  });
+});
+
+// Minimal mock config for testing degraded settings
+const createMockConfig = (overrides: Partial<RelaisConfig> = {}): RelaisConfig => ({
+  v: 2,
+  runner: {
+    require_git: true,
+    max_tick_seconds: 300,
+    lockfile: 'relais/lock.json',
+    runner_owned_globs: ['relais/**'],
+    crash_cleanup: {
+      delete_tmp_glob: 'relais/*.tmp',
+      validate_runner_json_files: true,
+    },
+    render_report_md: {
+      enabled: true,
+      max_chars: 5000,
+    },
+  },
+  claude_code_cli: {
+    command: 'claude',
+    output_format: 'json',
+    no_session_persistence: true,
+  },
+  models: {
+    orchestrator_model: 'claude-sonnet-4-20250514',
+    orchestrator_fallback_model: 'claude-sonnet-4-20250514',
+    builder_model: 'claude-sonnet-4-20250514',
+    builder_fallback_model: 'claude-sonnet-4-20250514',
+  },
+  orchestrator: {
+    max_turns: 10,
+    permission_mode: 'plan',
+    allowed_tools: '',
+    system_prompt_file: 'prompts/orchestrator.system.txt',
+    user_prompt_file: 'prompts/orchestrator.user.txt',
+    task_schema_file: 'schemas/task.schema.json',
+    max_parse_retries_per_tick: 2,
+    max_budget_usd: 1,
+  },
+  builder: {
+    default_mode: 'claude_code',
+    allow_patch_mode: true,
+    claude_code: {
+      max_turns: 50,
+      permission_mode: 'bypassPermissions',
+      allowed_tools: '',
+      system_prompt_file: 'prompts/builder.system.txt',
+      user_prompt_file: 'prompts/builder.user.txt',
+      builder_result_schema_file: 'schemas/builder_result.schema.json',
+      max_budget_usd: 5,
+      strict_builder_json: true,
+    },
+    patch: {
+      max_patch_attempts_per_milestone: 3,
+    },
+  },
+  scope: {
+    default_allowed_globs: ['src/**'],
+    default_forbidden_globs: ['.git/**'],
+    default_allow_new_files: true,
+    default_allow_lockfile_changes: false,
+    lockfiles: ['pnpm-lock.yaml', 'package-lock.json'],
+  },
+  diff_limits: {
+    default_max_files_touched: 20,
+    default_max_lines_changed: 500,
+  },
+  verify: [],
+  reviewer: {
+    enabled: false,
+    type: 'codex',
+    command: 'codex',
+    timeout_seconds: 60,
+    auto_approve_threshold: 0.8,
+    auto_reject_threshold: 0.3,
+    system_prompt_file: 'prompts/reviewer.system.txt',
+    user_prompt_file: 'prompts/reviewer.user.txt',
+    triggers: {
+      high_risk_globs: [],
+      diff_fraction_threshold: 0.5,
+      stop_window_ticks: 5,
+      max_stops_in_window: 2,
+    },
+  },
+  guardrails: {
+    identical_task_max_redispatches: 3,
+    require_branch_match: true,
+    require_clean_worktree: true,
+    max_consecutive_failures: 3,
+  },
+  history: {
+    enabled: true,
+    retention_count: 50,
+    dir: 'relais/history',
+  },
+  ...overrides,
+} as RelaisConfig);
+
+describe('extractDegradationInputs', () => {
+  it('should extract max_turns from builder config', () => {
+    const config = createMockConfig();
+    const inputs = extractDegradationInputs(config);
+
+    expect(inputs.max_turns).toBe(50);
+  });
+
+  it('should extract diff limits from config', () => {
+    const config = createMockConfig();
+    const inputs = extractDegradationInputs(config);
+
+    expect(inputs.diff_limits.max_files_touched).toBe(20);
+    expect(inputs.diff_limits.max_lines_changed).toBe(500);
+  });
+});
+
+describe('applyDegradedConfig', () => {
+  it('should reduce builder max_turns', () => {
+    const config = createMockConfig();
+    const degraded = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    const result = applyDegradedConfig(config, degraded);
+
+    expect(result.builder.claude_code.max_turns).toBe(25);
+  });
+
+  it('should reduce diff limits', () => {
+    const config = createMockConfig();
+    const degraded = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    const result = applyDegradedConfig(config, degraded);
+
+    expect(result.diff_limits.default_max_files_touched).toBe(10);
+    expect(result.diff_limits.default_max_lines_changed).toBe(250);
+  });
+
+  it('should switch to patch mode when allowed', () => {
+    const config = createMockConfig({
+      builder: {
+        ...createMockConfig().builder,
+        default_mode: 'claude_code',
+        allow_patch_mode: true,
+      },
+    });
+    const degraded = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    const result = applyDegradedConfig(config, degraded);
+
+    expect(result.builder.default_mode).toBe('patch');
+  });
+
+  it('should not switch to patch mode when not allowed', () => {
+    const config = createMockConfig({
+      builder: {
+        ...createMockConfig().builder,
+        default_mode: 'claude_code',
+        allow_patch_mode: false,
+      },
+    });
+    const degraded = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    const result = applyDegradedConfig(config, degraded);
+
+    expect(result.builder.default_mode).toBe('claude_code');
+  });
+
+  it('should not mutate original config', () => {
+    const config = createMockConfig();
+    const originalMaxTurns = config.builder.claude_code.max_turns;
+    const degraded = computeDegradedSettings(50, { max_files_touched: 20, max_lines_changed: 500 });
+
+    applyDegradedConfig(config, degraded);
+
+    expect(config.builder.claude_code.max_turns).toBe(originalMaxTurns);
+  });
+});
+
+describe('getDegradedConfigIfNeeded', () => {
+  it('should return original config for retry_count 0', () => {
+    const config = createMockConfig();
+
+    const result = getDegradedConfigIfNeeded(config, 0);
+
+    expect(result).toBe(config);
+  });
+
+  it('should return degraded config for retry_count 1', () => {
+    const config = createMockConfig();
+
+    const result = getDegradedConfigIfNeeded(config, 1);
+
+    expect(result).not.toBe(config);
+    expect(result.builder.claude_code.max_turns).toBe(25);
+    expect(result.diff_limits.default_max_files_touched).toBe(10);
+  });
+
+  it('should return original config for retry_count 2 (block)', () => {
+    const config = createMockConfig();
+
+    const result = getDegradedConfigIfNeeded(config, 2);
+
+    // At retry_count 2, action is 'block', not 'retry_degraded'
+    expect(result).toBe(config);
   });
 });
