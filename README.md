@@ -1,17 +1,19 @@
-# Relais
+Relais
 
-Relais is a CLI runner focused on reliable artifact persistence and safe interruption handling.
+Relais is a CLI runner focused on reliable artifact persistence and safe interrupt handling (SIGINT / Ctrl+C).
 
-## Build
-
-```bash
+Build
 cd /Users/clement/projects/relais
 npm run build
+
 Run (local)
 node /Users/clement/projects/relais/dist/index.js run
+
+
 Workspace directory is configured via relais.config.json (default: relais/).
 
 SIGINT / interrupt behavior (manual verification)
+
 Run this from the dogfood repo:
 
 cd /Users/clement/projects/relais-dogfood
@@ -36,17 +38,20 @@ echo "exit_code=$?"
 # verify artifacts + lock release
 ls -la relais/REPORT.json relais/REPORT.md
 ls relais/lock.json 2>/dev/null && echo "FAIL: lock not released" || echo "OK: lock released"
+
+
 Expected:
 
-logs include: [INTERRUPT] Abort signal received; persisting STOP_INTERRUPTED report
+Logs include: [INTERRUPT] Abort signal received; persisting STOP_INTERRUPTED report
 
-exit code is 130
+Exit code is 130
 
 relais/REPORT.json exists (and relais/REPORT.md if enabled)
 
 relais/lock.json is gone
 
 Repo notes
+
 relais/ contains workspace templates (prompts, schemas, fixtures) and runtime artifacts (ignored).
 
 pilot/ is documentation for older workflows.
