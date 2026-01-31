@@ -20,6 +20,8 @@ export interface ClaudeInvocation {
   systemPrompt?: string;
   /** Timeout in milliseconds */
   timeout: number;
+  /** AbortSignal for cancellation (optional) */
+  signal?: AbortSignal;
 }
 
 /**
@@ -51,4 +53,22 @@ export class ClaudeError extends Error {
     super(message);
     this.name = 'ClaudeError';
   }
+}
+
+/**
+ * Error thrown when a Claude Code invocation is interrupted by an AbortSignal.
+ */
+export class InterruptedError extends Error {
+  constructor(message: string = 'Operation interrupted by signal') {
+    super(message);
+    this.name = 'InterruptedError';
+  }
+}
+
+/**
+ * Type guard for InterruptedError.
+ */
+export function isInterruptedError(error: unknown): error is InterruptedError {
+  return error instanceof InterruptedError ||
+    (error instanceof Error && error.name === 'InterruptedError');
 }

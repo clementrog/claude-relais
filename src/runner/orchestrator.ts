@@ -5,12 +5,26 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { readFileSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { invokeClaudeCode } from '../lib/claude.js';
-import { loadSchema, validateWithSchema } from '../lib/schema.js';
+import { loadSchema, validateWithSchema, type RawAjvError } from '../lib/schema.js';
+import { readWorkspaceState } from '../lib/workspace_state.js';
 import type { RelaisConfig } from '../types/config.js';
 import type { TickState } from '../types/state.js';
 import type { Task } from '../types/task.js';
+import { isInterruptedError } from '../types/claude.js';
+
+/**
+ * Diagnostics for orchestrator failures.
+ */
+export interface OrchestratorDiagnosticsResult {
+  /** Raw AJV schema errors */
+  schemaErrors?: RawAjvError[];
+  /** How JSON was extracted */
+  extractMethod?: string;
+}
 
 /**
  * Result of orchestrator invocation.
@@ -28,6 +42,8 @@ export interface OrchestratorResult {
   attempts: number;
   /** The error that triggered retry (null if no retry or successful) */
   retryReason: string | null;
+  /** Diagnostics for debugging failures */
+  diagnostics?: OrchestratorDiagnosticsResult;
 }
 
 /**
@@ -56,16 +72,46 @@ export async function buildOrchestratorPrompt(
     );
   }
 
-  // Interpolate placeholders
-  // For now, use placeholder values as noted in the task requirements
+  // Get git status (tiny, shows uncommitted changes)
+  let gitStatus = '';
+  try {
+    gitStatus = execSync('git status --porcelain', {
+      encoding: 'utf-8',
+      maxBuffer: 10000,
+      cwd: workspaceDir,
+    }).trim();
+  } catch {
+    gitStatus = '(git status unavailable)';
+  }
+
+  // Read FACTS.md if exists
+  const factsPath = join(workspaceDir, 'relais/FACTS.md');
+  const facts = existsSync(factsPath) ? readFileSync(factsPath, 'utf-8') : '';
+
+  // Read REPORT.md if exists (last report)
+  const reportPath = join(workspaceDir, 'REPORT.md');
+  const lastReport = existsSync(reportPath) ? readFileSync(reportPath, 'utf-8') : '';
+
+  // Read STATE.json for milestone and budget summary
+  let milestoneId = 'none';
+  let budgetSummary = 'Budgets: (unavailable)';
+  try {
+    const wsState = await readWorkspaceState(workspaceDir);
+    milestoneId = wsState.milestone_id || 'none';
+    budgetSummary = `Milestone: ${milestoneId}, Ticks: ${wsState.budgets.ticks}, Orchestrator: ${wsState.budgets.orchestrator_calls}, Builder: ${wsState.budgets.builder_calls}, Verify: ${wsState.budgets.verify_runs}`;
+  } catch {
+    // STATE.json may not exist yet
+  }
+
+  // Interpolate placeholders with real values
   const replacements: Record<string, string> = {
-    '{{PROJECT_GOAL}}': '[Placeholder: Project goal]',
-    '{{MILESTONE_ID}}': '[Placeholder: Milestone ID]',
-    '{{BUDGETS_SUMMARY}}': '[Placeholder: Budgets summary]',
+    '{{PROJECT_GOAL}}': '[See FACTS.md for project context]',
+    '{{MILESTONE_ID}}': milestoneId,
+    '{{BUDGETS_SUMMARY}}': budgetSummary,
     '{{VERIFY_TEMPLATE_IDS}}': config.verification.templates.map((t) => t.id).join(', ') || '[No templates]',
-    '{{REPO_SUMMARY}}': '[Placeholder: Repo summary]',
-    '{{FACTS_MD}}': '[Placeholder: Facts markdown]',
-    '{{LAST_REPORT_MD}}': '[Placeholder: Last report markdown]',
+    '{{REPO_SUMMARY}}': gitStatus || '(clean)',
+    '{{FACTS_MD}}': facts,
+    '{{LAST_REPORT_MD}}': lastReport,
     '{{BLOCKED_JSON_OR_EMPTY}}': '',
   };
 
@@ -92,9 +138,13 @@ let taskSchemaCache: object | null = null;
  * validation, retries once with the error reason appended to the prompt.
  *
  * @param state - Current tick state
+ * @param signal - Optional AbortSignal for cancellation
  * @returns OrchestratorResult with task or error
  */
-export async function runOrchestrator(state: TickState): Promise<OrchestratorResult> {
+export async function runOrchestrator(
+  state: TickState,
+  signal?: AbortSignal
+): Promise<OrchestratorResult> {
   const config = state.config;
   const workspaceDir = config.workspace_dir;
 
@@ -164,6 +214,7 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
         model,
         systemPrompt,
         timeout,
+        signal,
       });
 
       if (!response.success || !response.result) {
@@ -190,7 +241,7 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
           // Retry once
           continue;
         } else {
-          // Second attempt also failed
+          // Second attempt also failed - include diagnostics
           return {
             success: false,
             task: null,
@@ -198,6 +249,9 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
             rawResponse: response.result,
             attempts,
             retryReason,
+            diagnostics: {
+              extractMethod: 'direct_parse',
+            },
           };
         }
       }
@@ -215,7 +269,7 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
           // Retry once
           continue;
         } else {
-          // Second attempt also failed
+          // Second attempt also failed - include diagnostics
           return {
             success: false,
             task: null,
@@ -223,6 +277,10 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
             rawResponse: response.result,
             attempts,
             retryReason,
+            diagnostics: {
+              schemaErrors: validationResult.rawErrors,
+              extractMethod: 'direct_parse',
+            },
           };
         }
       }
@@ -237,6 +295,10 @@ export async function runOrchestrator(state: TickState): Promise<OrchestratorRes
         retryReason: attempt === 1 ? retryReason : null,
       };
     } catch (error) {
+      // Re-throw InterruptedError to propagate to tick level
+      if (isInterruptedError(error)) {
+        throw error;
+      }
       // Non-retryable error (invocation exception)
       return {
         success: false,

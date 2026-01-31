@@ -11,6 +11,7 @@ import type { RelaisConfig } from '../types/config.js';
 import type { PreflightResult, BlockedCode } from '../types/preflight.js';
 import { cleanupTmpFiles } from './fs.js';
 import { isGitRepo, isWorktreeCleanExcluding, getHeadCommit } from './git.js';
+import { readWorkspaceState } from './workspace_state.js';
 
 /**
  * Creates a blocked PreflightResult with the given code and reason.
@@ -170,9 +171,45 @@ export async function runPreflight(config: RelaisConfig): Promise<PreflightResul
     }
   }
 
-  // 5. Budget check (placeholder - return warning for now)
-  // Full budget checking will be implemented when milestone tracking is complete
-  warnings.push('Budget checking is not yet implemented - proceeding without budget verification');
+  // 5. Budget hard-cap check
+  // Read workspace state and check if any budget exceeds its per-milestone cap
+  try {
+    const state = await readWorkspaceState(config.workspace_dir);
+    const caps = config.budgets.per_milestone;
+    
+    if (state.budgets.ticks >= caps.max_ticks) {
+      return blocked(
+        'BLOCKED_BUDGET_CAP',
+        `Tick budget exceeded: ${state.budgets.ticks} >= ${caps.max_ticks}`
+      );
+    }
+    if (state.budgets.orchestrator_calls >= caps.max_orchestrator_calls) {
+      return blocked(
+        'BLOCKED_BUDGET_CAP',
+        `Orchestrator call budget exceeded: ${state.budgets.orchestrator_calls} >= ${caps.max_orchestrator_calls}`
+      );
+    }
+    if (state.budgets.builder_calls >= caps.max_builder_calls) {
+      return blocked(
+        'BLOCKED_BUDGET_CAP',
+        `Builder call budget exceeded: ${state.budgets.builder_calls} >= ${caps.max_builder_calls}`
+      );
+    }
+    if (state.budgets.verify_runs >= caps.max_verify_runs) {
+      return blocked(
+        'BLOCKED_BUDGET_CAP',
+        `Verify run budget exceeded: ${state.budgets.verify_runs} >= ${caps.max_verify_runs}`
+      );
+    }
+    
+    // Add warning if approaching any limit
+    if (state.budget_warning) {
+      warnings.push('Budget warning: approaching limit on one or more budget categories');
+    }
+  } catch (error) {
+    // If we can't read state, add warning but don't block
+    warnings.push(`Could not read workspace state for budget check: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   return success(baseCommit, warnings);
 }

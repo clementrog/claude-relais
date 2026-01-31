@@ -1,0 +1,12 @@
+#!/bin/bash
+# Hangs forever until killed, simulating a slow orchestrator.
+# Outputs valid JSON structure when killed to avoid parse errors.
+# Used for SIGINT artifact persistence testing.
+
+# Trap SIGTERM/SIGINT to output valid JSON before exiting
+trap 'echo "{\"result\": \"interrupted\"}"; exit 143' SIGTERM SIGINT
+
+# Hang forever
+while true; do
+  sleep 1
+done

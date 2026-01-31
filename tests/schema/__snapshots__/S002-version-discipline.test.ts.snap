@@ -9,7 +9,6 @@ exports[`S002: Version bump discipline > Breaking change detection > should dete
   "scope",
   "diff_limits",
   "verification",
-  "builder",
 ]
 `;
 
@@ -113,7 +112,6 @@ exports[`S002: Version bump discipline > Schema snapshot comparison > should mat
     "scope",
     "diff_limits",
     "verification",
-    "builder",
   ],
   "title": "Relais Task",
   "type": "object",

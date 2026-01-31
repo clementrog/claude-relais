@@ -10,6 +10,17 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /**
+ * Raw AJV error object (subset of fields we care about).
+ */
+export interface RawAjvError {
+  instancePath: string;
+  schemaPath: string;
+  keyword: string;
+  params: Record<string, unknown>;
+  message?: string;
+}
+
+/**
  * Result of schema validation.
  */
 export interface ValidationResult<T> {
@@ -19,6 +30,8 @@ export interface ValidationResult<T> {
   data: T | null;
   /** Validation error messages if invalid */
   errors: string[];
+  /** Raw AJV error objects for diagnostics */
+  rawErrors?: RawAjvError[];
 }
 
 // Cache for compiled schemas
@@ -97,9 +110,21 @@ export function validateWithSchema<T>(data: unknown, schema: object): Validation
     }
   }
 
+  // Extract raw errors for diagnostics
+  const rawErrors: RawAjvError[] = validate.errors
+    ? validate.errors.map((e) => ({
+        instancePath: e.instancePath || '',
+        schemaPath: e.schemaPath || '',
+        keyword: e.keyword || '',
+        params: e.params as Record<string, unknown>,
+        message: e.message,
+      }))
+    : [];
+
   return {
     valid: false,
     data: null,
     errors,
+    rawErrors,
   };
 }

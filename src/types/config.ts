@@ -121,17 +121,34 @@ export interface PatchBuilderConfig {
 }
 
 /**
+ * External builder driver ("cursor mode") configuration.
+ * Works with any headless script: Cursor wrapper, llm CLI, etc.
+ */
+export interface CursorBuilderConfig {
+  /** Command to invoke the external driver */
+  command: string;
+  /** Arguments to pass (argv-only, no shell string) */
+  args: string[];
+  /** Timeout in seconds before killing the process */
+  timeout_seconds: number;
+  /** Output file path where driver writes result (e.g., 'relais/BUILDER_RESULT.json') */
+  output_file: string;
+}
+
+/**
  * Builder agent configuration.
  */
 export interface BuilderConfig {
-  /** Default builder mode ('claude_code' or 'patch') */
-  default_mode: 'claude_code' | 'patch';
+  /** Default builder mode ('claude_code' or 'patch' or 'cursor') */
+  default_mode: 'claude_code' | 'patch' | 'cursor';
   /** Whether patch mode is allowed */
   allow_patch_mode: boolean;
   /** Claude Code builder settings */
   claude_code: ClaudeCodeBuilderConfig;
   /** Patch builder settings */
   patch: PatchBuilderConfig;
+  /** Cursor (external driver) settings */
+  cursor?: CursorBuilderConfig;
 }
 
 /**

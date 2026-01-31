@@ -4,7 +4,7 @@
   "title": "Relais Task",
   "type": "object",
   "additionalProperties": false,
-  "required": ["task_id", "milestone_id", "task_kind", "intent", "scope", "diff_limits", "verification", "builder"],
+  "required": ["task_id", "milestone_id", "task_kind", "intent", "scope", "diff_limits", "verification"],
   "properties": {
     "task_id": { "type": "string", "minLength": 1, "maxLength": 80 },
     "milestone_id": { "type": "string", "minLength": 1, "maxLength": 80 },
@@ -87,7 +87,7 @@
       "additionalProperties": false,
       "required": ["mode", "max_turns", "instructions"],
       "properties": {
-        "mode": { "type": "string", "enum": ["claude_code", "patch"] },
+        "mode": { "type": "string", "enum": ["claude_code", "patch", "cursor"] },
         "max_turns": { "type": "integer", "minimum": 1, "maximum": 40 },
         "instructions": { "type": "string", "minLength": 1, "maxLength": 4000 },
         "patch": { "type": "string", "minLength": 1, "maxLength": 500000 }
@@ -102,12 +102,31 @@
           "then": { "properties": { "mode": { "const": "claude_code" } } }
         }
       ]
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "type": "string", "enum": ["continue", "stop"] },
+        "reason": { "type": "string", "maxLength": 400 }
+      }
     }
   },
   "allOf": [
     {
       "if": { "properties": { "task_kind": { "const": "question" } } },
       "then": { "required": ["question"] }
+    }
+  ],
+  "oneOf": [
+    {
+      "required": ["control"],
+      "not": { "required": ["builder"] }
+    },
+    {
+      "required": ["builder"],
+      "not": { "required": ["control"] }
     }
   ]
 }

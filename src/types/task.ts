@@ -60,7 +60,7 @@ export interface TaskVerification {
  */
 export interface TaskBuilder {
   /** Builder mode */
-  mode: 'claude_code' | 'patch';
+  mode: 'claude_code' | 'patch' | 'cursor';
   /** Maximum number of turns */
   max_turns: number;
   /** Instructions for the builder */
@@ -70,9 +70,20 @@ export interface TaskBuilder {
 }
 
 /**
+ * Control configuration for stopping the loop.
+ */
+export interface TaskControl {
+  /** Action: continue or stop */
+  action: 'continue' | 'stop';
+  /** Optional reason for the action */
+  reason?: string;
+}
+
+/**
  * Task structure output by the orchestrator.
  *
  * This matches the structure defined in task.schema.json.
+ * Note: Either builder or control must be present (XOR), enforced by schema.
  */
 export interface Task {
   /** Unique task identifier */
@@ -91,6 +102,8 @@ export interface Task {
   diff_limits: DiffLimits;
   /** Verification configuration */
   verification: TaskVerification;
-  /** Builder configuration */
-  builder: TaskBuilder;
+  /** Builder configuration (mutually exclusive with control) */
+  builder?: TaskBuilder;
+  /** Control configuration for stopping the loop (mutually exclusive with builder) */
+  control?: TaskControl;
 }

@@ -5,8 +5,9 @@
  * it must write BLOCKED.json explaining the exact remediation required.
  */
 
+import { unlink } from 'node:fs/promises';
 import { atomicWriteJson } from './fs.js';
-import type { BlockedData } from '../types/blocked.js';
+import type { BlockedData, OrchestratorDiagnostics } from '../types/blocked.js';
 import type { BlockedCode } from '../types/preflight.js';
 
 /**
@@ -88,4 +89,60 @@ export function buildBlockedData(
  */
 export async function writeBlocked(data: BlockedData, path: string): Promise<void> {
   await atomicWriteJson(path, data);
+}
+
+/**
+ * Deletes BLOCKED.json from the specified path (best-effort).
+ *
+ * Used to clean up stale BLOCKED.json files when a tick completes
+ * with a non-blocked outcome (success or stop).
+ *
+ * @param path - The file path where BLOCKED.json should be deleted
+ *
+ * @example
+ * ```typescript
+ * await deleteBlocked('/relais/BLOCKED.json');
+ * ```
+ */
+export async function deleteBlocked(path: string): Promise<void> {
+  try {
+    await unlink(path);
+  } catch {
+    // Best-effort: ignore ENOENT and other errors
+  }
+}
+
+/**
+ * Builds BlockedData specifically for orchestrator output validation failures.
+ *
+ * Includes detailed diagnostics to help debug why the orchestrator output
+ * failed validation.
+ *
+ * @param reason - Human-readable explanation of the failure
+ * @param diagnostics - Detailed diagnostics including AJV errors and excerpts
+ * @returns Complete BlockedData object with diagnostics
+ *
+ * @example
+ * ```typescript
+ * const data = buildOrchestratorBlockedData(
+ *   'Task validation failed: Missing required property: task_id',
+ *   {
+ *     schema_errors: [{ keyword: 'required', ... }],
+ *     stdout_excerpt: '{ "invalid": "json" }',
+ *     extract_method: 'direct_parse',
+ *   }
+ * );
+ * ```
+ */
+export function buildOrchestratorBlockedData(
+  reason: string,
+  diagnostics: OrchestratorDiagnostics
+): BlockedData {
+  return {
+    blocked_at: new Date().toISOString(),
+    code: 'BLOCKED_ORCHESTRATOR_OUTPUT_INVALID',
+    reason,
+    remediation: REMEDIATION_MESSAGES['BLOCKED_ORCHESTRATOR_OUTPUT_INVALID'],
+    diagnostics,
+  };
 }

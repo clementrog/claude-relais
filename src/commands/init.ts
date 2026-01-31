@@ -52,6 +52,11 @@ function createInitialState(): {
   blockers: never[];
   next: null;
   ts: string;
+  milestone_id: string | null;
+  budgets: { ticks: number; orchestrator_calls: number; builder_calls: number; verify_runs: number };
+  budget_warning: boolean;
+  last_run_id: string | null;
+  last_verdict: string | null;
 } {
   return {
     v: 3,
@@ -65,6 +70,16 @@ function createInitialState(): {
     blockers: [],
     next: null,
     ts: new Date().toISOString(),
+    milestone_id: null,
+    budgets: {
+      ticks: 0,
+      orchestrator_calls: 0,
+      builder_calls: 0,
+      verify_runs: 0,
+    },
+    budget_warning: false,
+    last_run_id: null,
+    last_verdict: null,
   };
 }
 

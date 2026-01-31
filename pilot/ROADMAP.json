@@ -7,7 +7,7 @@
     "runtime": "node",
     "package_manager": "pnpm"
   },
-  "current": "M9",
+  "current": "M17",
   "milestones": [
     {
       "id": "M1",
@@ -101,42 +101,132 @@
       "status": "completed",
       "risk": "MED",
       "tasks": [
-        "WP-070: Reviewer config types (reviewer section in relais.config.json)",
-        "WP-071: Codex CLI wrapper (invocation, auth handling, output parsing)",
-        "WP-072: Reviewer schema + prompts (reviewer_result.schema.json, reviewer.system.txt, reviewer.user.txt)",
-        "WP-073: Risk scoring + trigger logic (high_risk_globs, diff_fraction, repeated_stop)",
-        "WP-074: Integrate reviewer into tick flow (new STOP codes: STOP_REVIEWER_FORCED_PATCH, STOP_REVIEWER_ASK_QUESTION)",
-        "WP-075: STATE.json guardrail fields (force_patch_until_success, stop_history)",
-        "WP-076: Doctor checks for reviewer (codex --version, auth status)",
+        "WP-070: Reviewer config types",
+        "WP-071: Codex CLI wrapper",
+        "WP-072: Reviewer schema + prompts",
+        "WP-073: Risk scoring + trigger logic",
+        "WP-074: Integrate reviewer into tick flow",
+        "WP-075: STATE.json guardrail fields",
+        "WP-076: Doctor checks for reviewer",
         "WP-077: Reviewer fixtures R101-R104"
       ]
     },
     {
       "id": "M9",
       "title": "Guardrails",
-      "status": "pending",
+      "status": "completed",
       "risk": "MED",
       "tasks": [
-        "WP-080: Task fingerprint (canonicalizeTask + sha256)",
-        "WP-081: New STOP codes (STOP_REDISPATCH_IDENTICAL_TASK, STOP_VERIFY_FLAKY_OR_TIMEOUT, STOP_MERGE_DIRTY_WORKTREE)",
-        "WP-082: STATE.json additions (task_fingerprint, last_failed_fingerprint, failure_streak, verify_history, escalation)",
-        "WP-083: Preflight checks (branch match, fingerprint match, worktree clean)",
-        "WP-084: Verify result classification (PASS/FAIL/TIMEOUT mapping)",
-        "WP-085: Escalation logic (shouldEscalate, 2-failure gate, stop-window)",
-        "WP-086: Merge eligibility checks (verify-gated, auto-stash pilot files)",
-        "WP-087: Update orchestrator prompt with fingerprint rule"
+        "WP-080: Task fingerprint",
+        "WP-081: New STOP codes",
+        "WP-082: STATE.json additions",
+        "WP-083: Preflight checks",
+        "WP-084: Verify result classification",
+        "WP-085: Escalation logic",
+        "WP-086: Merge eligibility checks",
+        "WP-087: Update orchestrator prompt"
       ]
     },
     {
       "id": "M10",
       "title": "Guardrails Tests",
-      "status": "pending",
+      "status": "completed",
       "risk": "LOW",
       "tasks": [
-        "WP-090: Unit tests U001-U005 (canonicalizeTask, classifyVerifyResult, shouldEscalate, preflightChecks, mergeEligibility)",
-        "WP-091: Fixtures F013-F016 (fingerprint stability, identical redispatch, escalation gate, timeout classification)",
-        "WP-092: Fixtures F017-F020 (branch mismatch, dirty worktree, evidence gating, stop-window escalation)",
-        "WP-093: Schema contract tests S001-S002 (roundtrip validation, version bump discipline)"
+        "WP-090: Unit tests U001-U005",
+        "WP-091: Fixtures F013-F016",
+        "WP-092: Fixtures F017-F020",
+        "WP-093: Schema contract tests S001-S002"
+      ]
+    },
+    {
+      "id": "M11",
+      "title": "STATE Ledger + Budget Hard-Cap (PR1)",
+      "status": "completed",
+      "risk": "MED",
+      "tasks": [
+        "WP-100: Create src/types/workspace_state.ts with WorkspaceState interface",
+        "WP-101: Create src/lib/workspace_state.ts with readWorkspaceState, writeWorkspaceState, ensureMilestone, applyDeltas, computeBudgetWarning",
+        "WP-102: Modify src/lib/preflight.ts to implement budget hard-cap check (BLOCKED_BUDGET_CAP)",
+        "WP-103: Modify src/commands/init.ts to write valid STATE.json matching WorkspaceState type",
+        "WP-104: Modify src/index.ts doctor path to show ledger summary + caps"
+      ]
+    },
+    {
+      "id": "M12",
+      "title": "Loop with Modes + SIGINT (PR2)",
+      "status": "completed",
+      "risk": "MED",
+      "tasks": [
+        "WP-110: Create src/runner/loop.ts with LoopMode type and runLoop function",
+        "WP-111: Implement stop_requested flag and SIGINT handler",
+        "WP-112: Implement loop logic with preflight check per tick",
+        "WP-113: Implement milestone mode (stop on control.action=stop, milestone change, or budget warning)",
+        "WP-114: Implement autonomous mode (allow milestone changes, archive ledger, reset budgets)",
+        "WP-115: Add CLI command: relais loop --mode milestone|autonomous [--max-ticks N]"
+      ]
+    },
+    {
+      "id": "M13",
+      "title": "Persist Milestone ID Early (PR3)",
+      "status": "completed",
+      "risk": "LOW",
+      "tasks": [
+        "WP-120: Modify src/runner/tick.ts to call ensureMilestone after orchestrator returns Task",
+        "WP-121: Write STATE immediately if milestone changed before build/judge/verify/report"
+      ]
+    },
+    {
+      "id": "M14",
+      "title": "Patch Builder Mode (PR4)",
+      "status": "completed",
+      "risk": "HIGH",
+      "tasks": [
+        "WP-130: Add patch mode handler in src/runner/builder.ts",
+        "WP-131: Implement patch validation rules (parse unified diff headers, reject .., /, \\0, outside repo)",
+        "WP-132: Implement scope check (allowed_globs, forbidden_globs)",
+        "WP-133: Implement symlink rejection (lstat each path and parent)",
+        "WP-134: Apply via git apply --whitespace=nowarn --unsafe-paths=false --directory=<repoRoot>",
+        "WP-135: Return STOP + rollback on apply failure"
+      ]
+    },
+    {
+      "id": "M15",
+      "title": "External Builder Driver - Cursor Mode (PR5)",
+      "status": "completed",
+      "risk": "HIGH",
+      "tasks": [
+        "WP-140: Add cursor config to src/types/config.ts (command, args, timeout_seconds, output_file)",
+        "WP-141: Validate cursor config in src/lib/config.ts (argv-only, no shell string)",
+        "WP-142: Add 'cursor' to builder.mode enum in task.schema.json and src/types/task.ts",
+        "WP-143: Implement cursor mode in src/runner/builder.ts (write TASK.json, spawn, read result)",
+        "WP-144: Implement timeout enforcement (kill child, return STOP_BUILDER_TIMEOUT, rollback)"
+      ]
+    },
+    {
+      "id": "M16",
+      "title": "Stop Conditions - control.action (PR6)",
+      "status": "completed",
+      "risk": "MED",
+      "tasks": [
+        "WP-150: Add control object to task.schema.json (action: continue|stop, reason: string)",
+        "WP-151: Enforce oneOf exclusivity in schema (control XOR builder)",
+        "WP-152: Update src/types/task.ts with control field",
+        "WP-153: Update loop behavior to stop on control.action=stop"
+      ]
+    },
+    {
+      "id": "M17",
+      "title": "Prompt Placeholder Tightening + Acceptance Tests",
+      "status": "completed",
+      "risk": "LOW",
+      "tasks": [
+        "WP-160: Replace orchestrator placeholders with git status --porcelain, FACTS.md, LAST_REPORT.md, STATE summary",
+        "WP-161: Drop {{REPO_SUMMARY}} placeholder",
+        "WP-162: Acceptance test: Loop stops on budget cap",
+        "WP-163: Acceptance test: SIGINT is graceful",
+        "WP-164: Acceptance test: Patch path traversal rejected",
+        "WP-165: Acceptance test: External builder timeout kills child"
       ]
     }
   ]

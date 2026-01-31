@@ -1,54 +1,51 @@
 {
   "v": 5,
-  "id": "WP-085",
-  "milestone": "M9",
-  "goal": "Implement escalation logic (shouldEscalate, 2-failure gate)",
+  "id": "WP-165",
+  "milestone": "M17",
+  "goal": "Acceptance test: External builder timeout kills child and returns STOP_BUILDER_TIMEOUT",
 
   "context": {
-    "why": "After 2 failures or repeated STOPs in window, must escalate to reviewer/human instead of allowing a third normal retry.",
-    "deps": ["WP-084"],
-    "extract": "From Guardrails spec ORCH-02: When failure_streak >= 2, orchestrator must not dispatch third normal retry. Instead escalate. RUN-04: If STOPs in last stop_window_ticks >= max_stops_in_window, set escalation.mode."
+    "why": "NEW-PLAN.md acceptance test: Verify that cursor mode timeout enforcement works - child process is killed and STOP_BUILDER_TIMEOUT is returned.",
+    "deps": ["WP-164"],
+    "ref": "docs/NEW-PLAN.md lines 312-320 (PR5 timeout rules)"
   },
 
   "subtasks": [
-    "1. Create shouldEscalate function in src/lib/guardrails.ts",
-    "2. Check failure_streak >= 2 -> escalate",
-    "3. Check stop_history window (count STOPs in last N ticks)",
-    "4. Check risk level (MED/HIGH may have stricter thresholds)",
-    "5. Return EscalationDecision with mode (none/reviewer/human) and reason",
-    "6. Export from src/lib/index.ts"
+    {
+      "id": "1",
+      "title": "Create external builder timeout test",
+      "file": "tests/runner/cursor-timeout.test.ts",
+      "action": "CREATE",
+      "description": "Create an acceptance test that verifies cursor mode timeout handling. Mock or create a slow command that exceeds timeout, verify STOP_BUILDER_TIMEOUT is returned in validationErrors.",
+      "code_hint": "import { describe, it, expect } from 'vitest';\n// Test handleCursorMode timeout behavior\n// Options:\n// 1. Mock execFileAsync to simulate timeout error (killed: true, signal: 'SIGTERM')\n// 2. Use a real slow command like 'sleep 10' with 1 second timeout\n// Verify result has:\n// - success: false\n// - validationErrors includes 'STOP_BUILDER_TIMEOUT'\n// - rawResponse mentions timeout"
+    }
   ],
 
-  "implementation": {
-    "function": "shouldEscalate(state, config) -> EscalationDecision",
-    "triggers": [
-      "failure_streak >= 2",
-      "stop_history count in window >= max_stops_in_window",
-      "MED/HIGH task with verify failure"
-    ],
-    "return_type": "EscalationDecision = { mode: 'none'|'reviewer'|'human', reason: string }"
-  },
-
   "scope": {
-    "write": ["src/lib/guardrails.ts", "src/lib/index.ts"],
-    "create_under": [],
+    "write": [],
+    "create_under": ["tests/runner"],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*", "relais/*", "tests/**"]
+    "forbidden": ["pilot/*"]
   },
 
   "acceptance": [
-    "shouldEscalate returns EscalationDecision",
-    "failure_streak >= 2 triggers escalation",
-    "Stop window threshold triggers escalation",
-    "Mode is reviewer if enabled, else human",
-    "Reason string explains why escalation triggered",
-    "pnpm build succeeds"
+    "Test file tests/runner/cursor-timeout.test.ts exists",
+    "Test verifies timeout returns STOP_BUILDER_TIMEOUT",
+    "Test verifies success is false on timeout",
+    "Test passes with pnpm test"
   ],
 
-  "verify": ["pnpm build"],
-  "risk": "MED",
+  "verify": ["pnpm typecheck", "pnpm test"],
+  "risk": "LOW",
+
+  "builder": {
+    "mode": "cursor"
+  },
+
   "notes": [
-    "Integrates with existing checkRepeatedStops from risk.ts",
-    "Escalation prevents infinite retry loops"
+    "Can mock execFileAsync or use real 'sleep' command with short timeout",
+    "The timeout error from Node has killed=true and signal='SIGTERM' or 'SIGKILL'",
+    "handleCursorMode checks for these properties to detect timeout",
+    "This completes M17 - all acceptance tests done"
   ]
 }

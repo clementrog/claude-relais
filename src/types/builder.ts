@@ -5,6 +5,16 @@
  */
 
 /**
+ * Result codes for builder invocation (e.g. placeholder or error codes).
+ */
+export type BuilderResultCode =
+  | 'STOP_PATCH_NOT_IMPLEMENTED'
+  | 'STOP_PATCH_INVALID_PATH'
+  | 'STOP_PATCH_SCOPE_VIOLATION'
+  | 'STOP_PATCH_SYMLINK'
+  | 'STOP_PATCH_APPLY_FAILED';
+
+/**
  * Builder result structure output by the builder.
  *
  * This matches the structure defined in builder_result.schema.json.

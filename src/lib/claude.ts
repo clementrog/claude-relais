@@ -7,7 +7,7 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import type { ClaudeCodeCliConfig } from '../types/config.js';
 import type { ClaudeInvocation, ClaudeResponse } from '../types/claude.js';
-import { ClaudeError } from '../types/claude.js';
+import { ClaudeError, InterruptedError } from '../types/claude.js';
 
 /**
  * Builds CLI arguments array from config and invocation parameters.
@@ -105,6 +105,11 @@ export async function invokeClaudeCode(
   config: ClaudeCodeCliConfig,
   invocation: ClaudeInvocation
 ): Promise<ClaudeResponse> {
+  // Short-circuit if already aborted
+  if (invocation.signal?.aborted) {
+    throw new InterruptedError('Claude Code invocation aborted by signal');
+  }
+
   const startTime = Date.now();
   const args = buildClaudeArgs(config, invocation);
 
@@ -112,17 +117,63 @@ export async function invokeClaudeCode(
     let stdout = '';
     let stderr = '';
     let timeoutId: NodeJS.Timeout | null = null;
+    let aborted = false;
+    let abortHandler: (() => void) | null = null;
+    let exited = false;
+    let killTimerId: NodeJS.Timeout | null = null;
 
     // Spawn the process
     const child: ChildProcess = spawn(config.command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    // Cleanup function to remove all listeners and timers
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (killTimerId) {
+        clearTimeout(killTimerId);
+        killTimerId = null;
+      }
+      if (abortHandler && invocation.signal) {
+        invocation.signal.removeEventListener('abort', abortHandler);
+        abortHandler = null;
+      }
+    };
+
+    // Track if child has exited
+    child.on('exit', () => {
+      exited = true;
+      // Clear the SIGKILL escalation timer if child exited
+      if (killTimerId) {
+        clearTimeout(killTimerId);
+        killTimerId = null;
+      }
+    });
+
+    // Handle abort signal
+    if (invocation.signal) {
+      abortHandler = () => {
+        if (aborted) return;
+        aborted = true;
+        cleanup();
+        child.kill('SIGTERM');
+        // Force kill after 1 second if still alive
+        killTimerId = setTimeout(() => {
+          if (!exited) child.kill('SIGKILL');
+        }, 1000);
+        reject(new InterruptedError('Claude Code invocation aborted by signal'));
+      };
+      invocation.signal.addEventListener('abort', abortHandler, { once: true });
+    }
+
     // Set up timeout
     if (invocation.timeout > 0) {
       timeoutId = setTimeout(() => {
+        cleanup();
         child.kill('SIGTERM');
-        const durationMs = Date.now() - startTime;
         reject(
           new ClaudeError(
             `Claude Code CLI invocation timed out after ${invocation.timeout}ms`,
@@ -145,15 +196,18 @@ export async function invokeClaudeCode(
 
     // Handle process completion
     child.on('close', (code: number | null) => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      // If we were aborted, error was already handled
+      if (aborted) {
+        return;
       }
+
+      cleanup();
 
       const durationMs = Date.now() - startTime;
       const exitCode = code ?? 0;
 
       // If process was killed by timeout, error was already handled
-      if (code === null && timeoutId) {
+      if (code === null && !aborted) {
         return;
       }
 
@@ -182,11 +236,12 @@ export async function invokeClaudeCode(
 
     // Handle process errors
     child.on('error', (error: Error) => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      if (aborted) {
+        return;
       }
 
-      const durationMs = Date.now() - startTime;
+      cleanup();
+
       reject(
         new ClaudeError(
           `Failed to spawn Claude Code CLI process: ${error.message}`,

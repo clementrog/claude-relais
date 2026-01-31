@@ -2,12 +2,12 @@
   "v": 3,
   "phase": "BUILD",
   "mode": "single",
-  "task": "WP-085",
-  "milestone": "M9",
-  "branch": "task/wp-085-escalation-logic",
+  "task": "WP-141",
+  "milestone": "M15",
+  "branch": "task/wp-141-cursor-validation",
   "batch_tasks": [],
-  "attempt": 0,
+  "attempt": 1,
   "blockers": [],
-  "next": "JUDGE",
-  "ts": "2026-01-28T17:40:00Z"
+  "next": null,
+  "ts": "2026-01-30T14:10:00Z"
 }

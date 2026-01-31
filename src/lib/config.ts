@@ -114,7 +114,12 @@ export function validateConfig(config: unknown): config is RelaisConfig {
   // Validate builder
   if (typeof c.builder !== 'object' || c.builder === null) return false;
   const builder = c.builder as Record<string, unknown>;
-  if (builder.default_mode !== 'claude_code' && builder.default_mode !== 'patch') return false;
+  if (
+    builder.default_mode !== 'claude_code' &&
+    builder.default_mode !== 'patch' &&
+    builder.default_mode !== 'cursor'
+  )
+    return false;
   if (typeof builder.allow_patch_mode !== 'boolean') return false;
 
   // Validate builder.claude_code
@@ -133,6 +138,42 @@ export function validateConfig(config: unknown): config is RelaisConfig {
   if (typeof builder.patch !== 'object' || builder.patch === null) return false;
   const patchBuilder = builder.patch as Record<string, unknown>;
   if (typeof patchBuilder.max_patch_attempts_per_milestone !== 'number') return false;
+
+  // When default_mode is cursor, require and validate builder.cursor (argv-only, no shell string)
+  if (builder.default_mode === 'cursor') {
+    if (typeof builder.cursor !== 'object' || builder.cursor === null) {
+      throw new ConfigError('builder.cursor is required when default_mode is cursor');
+    }
+    const cursor = builder.cursor as Record<string, unknown>;
+    if (typeof cursor.command !== 'string' || cursor.command === '') {
+      throw new ConfigError('builder.cursor.command is required');
+    }
+    if (!Array.isArray(cursor.args)) {
+      throw new ConfigError('builder.cursor.args must be an array');
+    }
+    if (
+      typeof cursor.timeout_seconds !== 'number' ||
+      cursor.timeout_seconds <= 0 ||
+      !Number.isFinite(cursor.timeout_seconds)
+    ) {
+      throw new ConfigError('builder.cursor.timeout_seconds must be a positive number');
+    }
+    if (typeof cursor.output_file !== 'string' || cursor.output_file === '') {
+      throw new ConfigError('builder.cursor.output_file is required');
+    }
+    const shellMetachars = /[;&|`$(){}\[\]<>\n\r]/;
+    if (shellMetachars.test(cursor.command as string)) {
+      throw new ConfigError('builder.cursor.command contains shell metacharacters');
+    }
+    for (const arg of cursor.args as unknown[]) {
+      if (typeof arg !== 'string') {
+        throw new ConfigError('builder.cursor.args must contain only strings');
+      }
+      if (shellMetachars.test(arg)) {
+        throw new ConfigError(`builder.cursor.args contains shell metacharacter in: ${arg}`);
+      }
+    }
+  }
 
   // Validate scope
   if (typeof c.scope !== 'object' || c.scope === null) return false;
