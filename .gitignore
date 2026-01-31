@@ -26,3 +26,7 @@ Thumbs.db
 relais/lock.json
 relais/history/*
 !relais/history/.gitkeep
+
+# runtime workspaces / artifacts
+pilot/
+relais/
