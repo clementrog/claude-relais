@@ -41,3 +41,6 @@ relais/FACTS.md
 
 # macOS
 .DS_Store
+
+# Relais runtime output
+relais/history/
