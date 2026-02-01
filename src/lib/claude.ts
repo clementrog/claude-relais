@@ -21,7 +21,7 @@ export function buildClaudeArgs(
   invocation: ClaudeInvocation
 ): string[] {
   const args: string[] = [
-    '-p', // prompt mode (non-interactive)
+    '--print', // non-interactive output
     '--output-format',
     config.output_format,
     '--max-turns',
@@ -55,11 +55,15 @@ export function buildClaudeArgs(
  * The CLI returns a JSON wrapper with format: { result: 'model output', ... }
  * This function extracts the .result field as the actual model text.
  *
+ * When the CLI returns an error response (e.g., error_max_turns), the result
+ * field may be missing. In such cases, this function returns an empty result
+ * so callers can handle the situation gracefully.
+ *
  * @param stdout - Standard output from CLI process
- * @returns Parsed result object with result field
- * @throws {Error} If JSON parsing fails or result field is missing
+ * @returns Parsed result object with result field and optional subtype for errors
+ * @throws {Error} If JSON parsing fails
  */
-export function parseClaudeResponse(stdout: string): { result: string; raw: object } {
+export function parseClaudeResponse(stdout: string): { result: string; raw: object; subtype?: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout);
@@ -72,13 +76,25 @@ export function parseClaudeResponse(stdout: string): { result: string; raw: obje
   }
 
   const obj = parsed as Record<string, unknown>;
+
+  // Handle CLI error responses (e.g., error_max_turns) that lack a result field
+  // Return empty result so callers can handle based on subtype
   if (typeof obj.result !== 'string') {
-    throw new Error('Response missing required "result" field or result is not a string');
+    const subtype = typeof obj.subtype === 'string' ? obj.subtype : undefined;
+    if (process.env.RELAIS_DEBUG === '1') {
+      console.log(`[CLAUDE_DEBUG] No result field in response, subtype=${subtype}`);
+    }
+    return {
+      result: '',
+      raw: parsed as object,
+      subtype,
+    };
   }
 
   return {
     result: obj.result,
     raw: parsed as object,
+    subtype: typeof obj.subtype === 'string' ? obj.subtype : undefined,
   };
 }
 
@@ -127,6 +143,13 @@ export async function invokeClaudeCode(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
+    if (process.env.RELAIS_DEBUG === '1') {
+      console.log(`[CLAUDE_DEBUG] Spawned PID: ${child.pid}`);
+    }
+
+    // Close stdin: we always pass prompt via argv; prevents cli waiting on stdin
+    child.stdin?.end();
+
     // Cleanup function to remove all listeners and timers
     const cleanup = () => {
       if (timeoutId) {
@@ -144,7 +167,10 @@ export async function invokeClaudeCode(
     };
 
     // Track if child has exited
-    child.on('exit', () => {
+    child.on('exit', (code, signal) => {
+      if (process.env.RELAIS_DEBUG === '1') {
+        console.log(`[CLAUDE_DEBUG] Exit: code=${code}, signal=${signal}`);
+      }
       exited = true;
       // Clear the SIGKILL escalation timer if child exited
       if (killTimerId) {
@@ -215,14 +241,23 @@ export async function invokeClaudeCode(
         // Parse the JSON response
         const parsed = parseClaudeResponse(stdout);
 
+        // If result is empty and we have an error subtype, treat as failure
+        // Common subtypes: error_max_turns, error_during_execution
+        const isErrorSubtype = parsed.subtype?.startsWith('error_') ?? false;
+        const effectiveSuccess = exitCode === 0 && !isErrorSubtype;
+
         resolve({
-          success: exitCode === 0,
-          result: exitCode === 0 ? parsed.result : null,
+          success: effectiveSuccess,
+          result: effectiveSuccess ? parsed.result : (parsed.result || null),
           raw: parsed.raw,
           exitCode,
           durationMs,
+          stderr,
         });
       } catch (error) {
+        if (process.env.RELAIS_DEBUG === '1') {
+          console.log(`[CLAUDE_DEBUG] Parse failed. stdout (first 2000 chars):\n${stdout.slice(0, 2000)}`);
+        }
         reject(
           new ClaudeError(
             `Failed to parse Claude response: ${error instanceof Error ? error.message : String(error)}`,

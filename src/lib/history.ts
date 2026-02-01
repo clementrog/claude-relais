@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import type { RelaisConfig } from '../types/config.js';
 import type { ReportData, Verdict, ReportCode } from '../types/report.js';
 import { atomicWriteJson, AtomicFsError } from './fs.js';
+import type { RawAjvError } from './schema.js';
 
 /**
  * Gets the full path to the history directory for a specific run.
@@ -186,6 +187,140 @@ export async function snapshotRun(
  * @returns Promise that resolves to the count of history entries
  * @throws {Error} If reading the history directory fails
  */
+/**
+ * Error information for builder failures.
+ */
+export interface BuilderErrorInfo {
+  /** Error kind matching BuilderParseErrorKind or 'cli_error' */
+  kind: 'json_parse' | 'schema' | 'shape' | 'cli_error';
+  /** Human-readable error message */
+  message: string;
+  /** Additional error details */
+  details?: unknown;
+}
+
+/**
+ * Persists builder failure artifacts to history for debugging.
+ *
+ * Writes raw stdout, stderr (if available), and error info to
+ * history/<run_id>/ for post-mortem analysis.
+ *
+ * @param runId - Run ID
+ * @param stdout - Raw stdout from builder invocation
+ * @param stderr - Raw stderr from builder invocation (may be null)
+ * @param errorInfo - Structured error information
+ * @param config - Relais configuration
+ * @returns Promise that resolves when all artifacts are saved
+ * @throws {Error} If any write operation fails
+ */
+export async function persistBuilderFailure(
+  runId: string,
+  stdout: string,
+  stderr: string | null,
+  errorInfo: BuilderErrorInfo,
+  config: RelaisConfig
+): Promise<void> {
+  // Ensure history directory exists
+  await createHistorySnapshot(runId, config);
+
+  // Write raw stdout
+  await writeHistoryArtifact(runId, 'builder.stdout.raw.txt', stdout, config);
+
+  // Write raw stderr if available
+  if (stderr !== null && stderr.length > 0) {
+    await writeHistoryArtifact(runId, 'builder.stderr.raw.txt', stderr, config);
+  }
+
+  // Write structured error info
+  await writeHistoryArtifact(runId, 'builder.error.json', errorInfo, config);
+}
+
+/** Maximum size for stdout/stderr artifacts (200KB) */
+const MAX_OUTPUT_SIZE = 200 * 1024;
+
+/**
+ * Truncates content to max size with marker.
+ */
+function truncateWithMarker(content: string, maxSize: number): string {
+  if (content.length <= maxSize) {
+    return content;
+  }
+  return content.slice(0, maxSize - 12) + '\n[truncated]';
+}
+
+/**
+ * Metadata for orchestrator failure artifacts.
+ */
+export interface OrchestratorFailureMeta {
+  run_id: string;
+  phase: 'orchestrator';
+  model: string;
+  timeout_ms: number;
+  prompt_chars: number;
+  system_prompt_chars: number;
+  cwd: string;
+  args_summary_redacted: string;
+}
+
+/**
+ * Persists orchestrator failure artifacts to history for debugging.
+ *
+ * Writes stdout, stderr, extracted JSON, schema errors, and meta to
+ * history/<run_id>/orchestrator/ for post-mortem analysis.
+ *
+ * @param runId - Run ID
+ * @param stdout - Raw stdout from orchestrator invocation
+ * @param stderr - Raw stderr from orchestrator invocation
+ * @param extractedJson - Extracted JSON candidate if extraction succeeded
+ * @param schemaErrors - Ajv errors array when validation fails
+ * @param meta - Invocation metadata
+ * @param config - Relais configuration
+ * @returns Promise that resolves when all artifacts are saved
+ * @throws {Error} If any write operation fails
+ */
+export async function persistOrchestratorFailure(
+  runId: string,
+  stdout: string,
+  stderr: string,
+  extractedJson: unknown | null,
+  schemaErrors: RawAjvError[] | null,
+  meta: OrchestratorFailureMeta,
+  config: RelaisConfig
+): Promise<void> {
+  // Create orchestrator subdirectory under run history
+  const orchestratorPath = join(config.workspace_dir, config.history.dir, runId, 'orchestrator');
+  await mkdir(orchestratorPath, { recursive: true });
+
+  // Helper to write to orchestrator subdir
+  const writeArtifact = async (filename: string, content: string | object) => {
+    const filePath = join(orchestratorPath, filename);
+    if (typeof content === 'object') {
+      await atomicWriteJson(filePath, content);
+    } else {
+      await atomicWriteText(filePath, content);
+    }
+  };
+
+  // Write stdout.txt (truncated to 200KB)
+  await writeArtifact('stdout.txt', truncateWithMarker(stdout, MAX_OUTPUT_SIZE));
+
+  // Write stderr.txt (truncated, create even if empty)
+  await writeArtifact('stderr.txt', truncateWithMarker(stderr || '', MAX_OUTPUT_SIZE));
+
+  // Write extracted.json if extraction succeeded
+  if (extractedJson !== null && extractedJson !== undefined) {
+    await writeArtifact('extracted.json', extractedJson);
+  }
+
+  // Write schema_error.json if validation failed
+  if (schemaErrors !== null && schemaErrors.length > 0) {
+    await writeArtifact('schema_error.json', schemaErrors);
+  }
+
+  // Write meta.json
+  await writeArtifact('meta.json', meta);
+}
+
 export async function getHistoryCount(config: RelaisConfig): Promise<number> {
   const historyPath = join(config.workspace_dir, config.history.dir);
 

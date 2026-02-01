@@ -1,0 +1,6 @@
+{
+  "summary": "Implemented the new feature",
+  "files_intended": ["src/feature.ts", "src/feature.test.ts"],
+  "commands_ran": ["pnpm build", "pnpm test"],
+  "notes": ["All tests pass", "Feature is ready for review"]
+}

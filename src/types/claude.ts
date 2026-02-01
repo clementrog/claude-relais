@@ -38,6 +38,8 @@ export interface ClaudeResponse {
   exitCode: number;
   /** Duration of invocation in milliseconds */
   durationMs: number;
+  /** Standard error output from CLI */
+  stderr: string;
 }
 
 /**

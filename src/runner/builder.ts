@@ -18,6 +18,7 @@ import type { TickState } from '../types/state.js';
 import type { Task } from '../types/task.js';
 import type { BuilderResult, BuilderResultCode } from '../types/builder.js';
 import { isInterruptedError } from '../types/claude.js';
+import { parseBuilderResultRaw, type BuilderParseErrorKind } from './builder_parse.js';
 
 /**
  * Result of builder invocation.
@@ -39,6 +40,8 @@ export interface BuilderInvocationResult {
   turnsRequested: number;
   /** Actual turns used (from raw response, if available) */
   turnsUsed: number | null;
+  /** Parse error kind for granular STOP code mapping */
+  parseErrorKind?: BuilderParseErrorKind | 'cli_error';
 }
 
 /**
@@ -640,87 +643,39 @@ export async function runBuilder(
     const durationMs = Date.now() - startTime;
 
     if (!response.success || !response.result) {
-      // Invocation failure
+      // Invocation failure - extract subtype for better error classification
+      const rawObj = response.raw as Record<string, unknown> | undefined;
+      const subtype = typeof rawObj?.subtype === 'string' ? rawObj.subtype : '';
+      const errorInfo = subtype ? `CLI error: ${subtype}` : (response.result || 'Unknown error');
+
       return {
         success: false,
         result: null,
-        rawResponse: response.result || '',
+        rawResponse: errorInfo,
         durationMs,
         builderOutputValid: false,
-        validationErrors: [],
+        validationErrors: subtype ? [`STOP_BUILDER_${subtype.toUpperCase()}`] : [],
         turnsRequested: requestedTurns,
         turnsUsed,
+        parseErrorKind: 'cli_error',
       };
     }
 
-    // Try to parse JSON response
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(response.result);
-    } catch (error) {
-      // JSON parse error - lenient mode allows this
-      const parseError = error instanceof Error ? error.message : String(error);
-      if (strictBuilderJson) {
-        return {
-          success: false,
-          result: null,
-          rawResponse: response.result,
-          durationMs,
-          builderOutputValid: false,
-          validationErrors: [`JSON parse error: ${parseError}`],
-          turnsRequested: requestedTurns,
-          turnsUsed,
-        };
-      } else {
-        // Lenient mode: return success but mark output as invalid
-        return {
-          success: true,
-          result: null,
-          rawResponse: response.result,
-          durationMs,
-          builderOutputValid: false,
-          validationErrors: [`JSON parse error: ${parseError}`],
-          turnsRequested: requestedTurns,
-          turnsUsed,
-        };
-      }
+    // Parse and validate builder output using pure parser
+    if (process.env.RELAIS_DEBUG === '1') {
+      console.log(`[BUILDER_DEBUG] Raw response (first 500 chars): ${response.result.substring(0, 500)}`);
     }
 
-    // Validate against schema if schema was loaded
-    if (builderResultSchemaCache) {
-        const validationResult = validateWithSchema<BuilderResult>(parsed, builderResultSchemaCache);
-      if (!validationResult.valid) {
-        // Schema validation error
-        if (strictBuilderJson) {
-          return {
-            success: false,
-            result: null,
-            rawResponse: response.result,
-            durationMs,
-            builderOutputValid: false,
-            validationErrors: validationResult.errors,
-            turnsRequested: requestedTurns,
-            turnsUsed,
-          };
-        } else {
-          // Lenient mode: return success but mark output as invalid
-          return {
-            success: true,
-            result: null,
-            rawResponse: response.result,
-            durationMs,
-            builderOutputValid: false,
-            validationErrors: validationResult.errors,
-            turnsRequested: requestedTurns,
-            turnsUsed,
-          };
-        }
-      }
+    const parseResult = parseBuilderResultRaw(
+      response.result,
+      builderResultSchemaCache ?? undefined
+    );
 
+    if (parseResult.ok) {
       // Success with valid JSON
       return {
         success: true,
-        result: validationResult.data!,
+        result: parseResult.value,
         rawResponse: response.result,
         durationMs,
         builderOutputValid: true,
@@ -728,65 +683,56 @@ export async function runBuilder(
         turnsRequested: requestedTurns,
         turnsUsed,
       };
-    } else {
-      // Schema not loaded - assume parsed JSON is valid if it has the right shape
-      // This is a fallback for when schema loading fails
-      if (
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'summary' in parsed &&
-        'files_intended' in parsed &&
-        'commands_ran' in parsed &&
-        'notes' in parsed
-      ) {
-        return {
-          success: true,
-          result: parsed as BuilderResult,
-          rawResponse: response.result,
-          durationMs,
-          builderOutputValid: true,
-          validationErrors: [],
-          turnsRequested: requestedTurns,
-          turnsUsed,
-        };
-      } else {
-        // Invalid shape
-        const shapeError = 'Parsed JSON does not match expected BuilderResult shape';
-        if (strictBuilderJson) {
-          return {
-            success: false,
-            result: null,
-            rawResponse: response.result,
-            durationMs,
-            builderOutputValid: false,
-            validationErrors: [shapeError],
-            turnsRequested: requestedTurns,
-            turnsUsed,
-          };
-        } else {
-          return {
-            success: true,
-            result: null,
-            rawResponse: response.result,
-            durationMs,
-            builderOutputValid: false,
-            validationErrors: [shapeError],
-            turnsRequested: requestedTurns,
-            turnsUsed,
-          };
-        }
-      }
     }
+
+    // Parse failed - handle based on strictBuilderJson and task_kind
+    // Question tasks must fail-closed on invalid output
+    const mustFailClosed = strictBuilderJson || task.task_kind === 'question';
+
+    if (mustFailClosed) {
+      return {
+        success: false,
+        result: null,
+        rawResponse: response.result,
+        durationMs,
+        builderOutputValid: false,
+        validationErrors: [parseResult.message],
+        turnsRequested: requestedTurns,
+        turnsUsed,
+        parseErrorKind: parseResult.kind,
+      };
+    }
+
+    // Lenient mode: return success but mark output as invalid
+    return {
+      success: true,
+      result: null,
+      rawResponse: response.result,
+      durationMs,
+      builderOutputValid: false,
+      validationErrors: [parseResult.message],
+      turnsRequested: requestedTurns,
+      turnsUsed,
+      parseErrorKind: parseResult.kind,
+    };
   } catch (error) {
     // Re-throw InterruptedError to propagate to tick level
     if (isInterruptedError(error)) {
       throw error;
     }
-    // Invocation exception
+
+    // Debug logging gated by RELAIS_DEBUG
+    if (process.env.RELAIS_DEBUG === '1') {
+      console.log(`[BUILDER_DEBUG] Exception: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Capture error message in rawResponse for proper classification
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
     return {
       success: false,
       result: null,
-      rawResponse: '',
+      rawResponse: `Builder invocation error: ${errorMessage}`,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
       validationErrors: [],

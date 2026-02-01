@@ -43,6 +43,7 @@ import { validateAllParams } from '../lib/verify-safety.js';
 import { readWorkspaceState, writeWorkspaceState, ensureMilestone } from '../lib/workspace_state.js';
 import { spawn } from 'node:child_process';
 import { isInterruptedError } from '../types/claude.js';
+import { persistBuilderFailure, persistOrchestratorFailure, type OrchestratorFailureMeta } from '../lib/history.js';
 
 /**
  * Generates a basic report from tick state.
@@ -148,6 +149,25 @@ async function persistRunArtifacts(options: PersistArtifactsOptions): Promise<vo
 
   // 1. ALWAYS write REPORT.json first (most critical)
   await atomicWriteJson(join(workspaceDir, 'REPORT.json'), report);
+
+  // 1a. Update STATE.json with run metadata and budgets (non-critical)
+  try {
+    const wsState = await readWorkspaceState(workspaceDir);
+    const updatedState = {
+      ...wsState,
+      last_run_id: report.run_id,
+      last_verdict: report.verdict,
+      budgets: {
+        ticks: wsState.budgets.ticks + report.budgets.ticks,
+        orchestrator_calls: wsState.budgets.orchestrator_calls + report.budgets.orchestrator_calls,
+        builder_calls: wsState.budgets.builder_calls + report.budgets.builder_calls,
+        verify_runs: wsState.budgets.verify_runs + report.budgets.verify_runs,
+      },
+    };
+    await writeWorkspaceState(workspaceDir, updatedState);
+  } catch (stateError) {
+    console.error(`Failed to update STATE.json: ${stateError}`);
+  }
 
   // 2. Write REPORT.md if enabled (non-critical, don't block on failure)
   if (config.runner.render_report_md?.enabled) {
@@ -683,6 +703,35 @@ export async function runTick(
         `Orchestrator output invalid after ${orchestratorResult.attempts} attempt(s): ${orchestratorResult.error || 'unknown error'}`
       );
 
+      // Persist orchestrator failure artifacts for debugging
+      try {
+        const meta: OrchestratorFailureMeta = {
+          run_id: state.run_id,
+          phase: 'orchestrator',
+          model: config.models.orchestrator_model,
+          timeout_ms: config.runner.max_tick_seconds * 1000,
+          prompt_chars: 0, // Not available at this level
+          system_prompt_chars: 0, // Not available at this level
+          cwd: process.cwd(),
+          args_summary_redacted: `--max-turns ${config.orchestrator.max_turns} --permission-mode ${config.orchestrator.permission_mode} --model <model>`,
+        };
+        await persistOrchestratorFailure(
+          state.run_id,
+          orchestratorResult.rawResponse,
+          orchestratorResult.rawStderr,
+          orchestratorResult.diagnostics?.extractedJson ?? null,
+          orchestratorResult.diagnostics?.schemaErrors ?? null,
+          meta,
+          config
+        );
+        // Add pointer to history artifacts in warnings
+        report.budgets.warnings.push(
+          `Orchestrator output invalid; see ${config.workspace_dir}/history/${state.run_id}/orchestrator/`
+        );
+      } catch (persistError) {
+        console.warn(`Failed to persist orchestrator failure: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+      }
+
       await persistRunArtifacts({ config, report, blockedData });
       console.log(`[${TickPhase.ORCHESTRATE}] Artifacts persisted`);
 
@@ -731,8 +780,11 @@ export async function runTick(
 
     // Phase 4: BUILD
     console.log(`[${TickPhase.BUILD}] Running builder...`);
+    if (process.env.RELAIS_DEBUG === '1' && state.task) {
+      console.log(`[BUILD_DEBUG] task_id=${state.task.task_id}, task_kind=${state.task.task_kind}, max_turns=${state.task.builder?.max_turns ?? 'N/A'}`);
+    }
     state = transitionPhase(state, TickPhase.BUILD);
-    
+
     if (!state.task) {
       // This should not happen, but handle gracefully
       if (lockAcquired) {
@@ -790,10 +842,44 @@ export async function runTick(
         lockAcquired = false;
       }
 
-      // Use STOP_BUILDER_OUTPUT_INVALID if output was invalid, otherwise STOP_INTERRUPTED
-      const reportCode = !builderResult.builderOutputValid && builderResult.rawResponse
-        ? 'STOP_BUILDER_OUTPUT_INVALID'
-        : 'STOP_INTERRUPTED';
+      // Map parseErrorKind to granular STOP codes
+      let reportCode: ReportCode = 'STOP_INTERRUPTED';
+      if (builderResult.parseErrorKind) {
+        switch (builderResult.parseErrorKind) {
+          case 'json_parse':
+            reportCode = 'STOP_BUILDER_JSON_PARSE';
+            break;
+          case 'schema':
+            reportCode = 'STOP_BUILDER_SCHEMA_INVALID';
+            break;
+          case 'shape':
+            reportCode = 'STOP_BUILDER_SHAPE_INVALID';
+            break;
+          case 'cli_error':
+            reportCode = 'STOP_BUILDER_CLI_ERROR';
+            break;
+        }
+      }
+
+      // Persist builder failure artifacts for debugging
+      if (builderResult.rawResponse) {
+        try {
+          await persistBuilderFailure(
+            state.run_id,
+            builderResult.rawResponse,
+            null, // stderr not available from builder
+            {
+              kind: builderResult.parseErrorKind ?? 'cli_error',
+              message: builderResult.validationErrors.join('; ') || 'Builder invocation failed',
+              details: { validationErrors: builderResult.validationErrors },
+            },
+            config
+          );
+        } catch (persistError) {
+          // Log but don't fail the tick due to persistence issues
+          console.warn(`Failed to persist builder failure: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+        }
+      }
 
       const report = generateReport(
         {

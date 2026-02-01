@@ -38,3 +38,6 @@ relais/STATE.json
 relais/TASK.json
 relais/BLOCKED.json
 relais/FACTS.md
+
+# macOS
+.DS_Store

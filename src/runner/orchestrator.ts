@@ -24,6 +24,8 @@ export interface OrchestratorDiagnosticsResult {
   schemaErrors?: RawAjvError[];
   /** How JSON was extracted */
   extractMethod?: string;
+  /** Extracted JSON candidate before validation */
+  extractedJson?: unknown;
 }
 
 /**
@@ -38,6 +40,8 @@ export interface OrchestratorResult {
   error: string | null;
   /** Raw response from Claude Code */
   rawResponse: string;
+  /** Raw stderr from Claude Code */
+  rawStderr: string;
   /** Number of orchestrator calls made (1 or 2) */
   attempts: number;
   /** The error that triggered retry (null if no retry or successful) */
@@ -159,6 +163,7 @@ export async function runOrchestrator(
       task: null,
       error: `Failed to read orchestrator system prompt from ${systemPromptPath}: ${error instanceof Error ? error.message : String(error)}`,
       rawResponse: '',
+      rawStderr: '',
       attempts: 0,
       retryReason: null,
     };
@@ -175,6 +180,7 @@ export async function runOrchestrator(
         task: null,
         error: `Failed to load task schema: ${error instanceof Error ? error.message : String(error)}`,
         rawResponse: '',
+        rawStderr: '',
         attempts: 0,
         retryReason: null,
       };
@@ -201,6 +207,7 @@ export async function runOrchestrator(
         task: null,
         error: `Failed to build orchestrator prompt: ${error instanceof Error ? error.message : String(error)}`,
         rawResponse: '',
+        rawStderr: '',
         attempts,
         retryReason,
       };
@@ -224,6 +231,7 @@ export async function runOrchestrator(
           task: null,
           error: `Claude Code invocation failed with exit code ${response.exitCode}`,
           rawResponse: response.result || '',
+          rawStderr: response.stderr,
           attempts,
           retryReason,
         };
@@ -232,7 +240,11 @@ export async function runOrchestrator(
       // Parse JSON response
       let parsed: unknown;
       try {
-        parsed = JSON.parse(response.result);
+        const raw = response.result.trim();
+        const unfenced = raw.startsWith("```")
+          ? raw.replace(/^```[a-zA-Z0-9_-]*\s*\n?/, "").replace(/```[\s]*$/, "").trim()
+          : raw;
+        parsed = JSON.parse(unfenced);
       } catch (error) {
         // JSON parse error - retryable
         retryReason = `Failed to parse orchestrator output as JSON: ${error instanceof Error ? error.message : String(error)}`;
@@ -247,6 +259,7 @@ export async function runOrchestrator(
             task: null,
             error: retryReason,
             rawResponse: response.result,
+            rawStderr: response.stderr,
             attempts,
             retryReason,
             diagnostics: {
@@ -275,11 +288,13 @@ export async function runOrchestrator(
             task: null,
             error: retryReason,
             rawResponse: response.result,
+            rawStderr: response.stderr,
             attempts,
             retryReason,
             diagnostics: {
               schemaErrors: validationResult.rawErrors,
               extractMethod: 'direct_parse',
+              extractedJson: parsed,
             },
           };
         }
@@ -291,6 +306,7 @@ export async function runOrchestrator(
         task: validationResult.data!,
         error: null,
         rawResponse: response.result,
+        rawStderr: response.stderr,
         attempts,
         retryReason: attempt === 1 ? retryReason : null,
       };
@@ -305,6 +321,7 @@ export async function runOrchestrator(
         task: null,
         error: `Claude Code invocation error: ${error instanceof Error ? error.message : String(error)}`,
         rawResponse: '',
+        rawStderr: '',
         attempts,
         retryReason,
       };
@@ -317,6 +334,7 @@ export async function runOrchestrator(
     task: null,
     error: 'Unexpected error in orchestrator retry logic',
     rawResponse: '',
+    rawStderr: '',
     attempts,
     retryReason,
   };
