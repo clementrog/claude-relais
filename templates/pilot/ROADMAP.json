@@ -1,0 +1,7 @@
+{
+  "v": 1,
+  "project": "target-project",
+  "description": "Optional multi-milestone roadmap",
+  "current": "pending",
+  "milestones": []
+}

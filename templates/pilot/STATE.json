@@ -1,0 +1,13 @@
+{
+  "v": 5,
+  "phase": "IDLE",
+  "mode": "single",
+  "task": null,
+  "milestone": null,
+  "branch": "main",
+  "batch_tasks": [],
+  "attempt": 0,
+  "blockers": [],
+  "next": null,
+  "ts": "1970-01-01T00:00:00Z"
+}

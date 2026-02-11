@@ -1,0 +1,25 @@
+{
+  "v": 5,
+  "id": "WP-001",
+  "milestone": null,
+  "goal": "Describe the bounded task goal",
+  "context": {
+    "why": "Why this task matters",
+    "deps": [],
+    "extract": []
+  },
+  "subtasks": [],
+  "scope": {
+    "write": [],
+    "create_under": [],
+    "read_forbidden": [".env*", "*.pem", "*.key"],
+    "forbidden": ["pilot/*"]
+  },
+  "acceptance": [],
+  "verify": [],
+  "risk": "LOW",
+  "builder": {
+    "mode": "cursor"
+  },
+  "notes": []
+}

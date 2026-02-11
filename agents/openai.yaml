@@ -1,0 +1,3 @@
+interface:
+  display_name: "Claude Relais"
+  short_description: "Guarded orchestration loop with Claude Opus and optional Cursor headless builder"

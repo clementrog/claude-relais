@@ -1,0 +1,15 @@
+{
+  "v": 3,
+  "task": null,
+  "status": "PENDING",
+  "subtasks_completed": [],
+  "git_diff_files": [],
+  "files": {
+    "changed": [],
+    "created": [],
+    "deleted": []
+  },
+  "verify": [],
+  "notes": [],
+  "blockers": []
+}

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Shell syntax
+        run: bash -n scripts/*.sh
+
+      - name: Script executable bits
+        run: |
+          test -x scripts/install.sh
+          test -x scripts/preflight.sh
+          test -x scripts/smoke.sh
+          test -x scripts/uninstall.sh
+          test -x scripts/bootstrap-project.sh
+
+      - name: Legacy branding guard
+        run: |
+          if rg -n --hidden --glob '!.git/**' 'envoi|@ttfw/envoi' README.md SKILL.md references scripts agents templates BOOT.txt ORCHESTRATOR.md claude.md; then
+            echo "Legacy branding detected"
+            exit 1
+          fi
+
+      - name: Install dry-run
+        run: ./scripts/install.sh --dry-run --no-preflight
+
+      - name: Bootstrap dry-run
+        run: |
+          mkdir -p /tmp/ci-target
+          ./scripts/bootstrap-project.sh --project-root /tmp/ci-target --dry-run
+
+      - name: End-to-end local smoke
+        run: |
+          DEST=/tmp/claude-relais-ci-skills
+          TARGET=/tmp/claude-relais-ci-target
+          rm -rf "$DEST" "$TARGET"
+          ./scripts/install.sh --dest "$DEST" --no-preflight --force
+          ./scripts/smoke.sh --dest "$DEST" --no-preflight
+          mkdir -p "$TARGET"
+          ./scripts/bootstrap-project.sh --project-root "$TARGET"
+          test -f "$TARGET/pilot/STATE.json"
+          test -f "$TARGET/pilot/TASK.json"
+          ./scripts/uninstall.sh --dest "$DEST" --yes

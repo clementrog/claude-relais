@@ -1,0 +1,38 @@
+{
+  "_setup": {
+    "status": "pending",
+    "instructions": "Capture design direction before high-impact UI work."
+  },
+  "visual": {
+    "direction": null,
+    "adjectives": [],
+    "references": [],
+    "anti_patterns": []
+  },
+  "color": {
+    "strategy": null,
+    "brand": null,
+    "accent": null,
+    "surface": null,
+    "text": null
+  },
+  "typography": {
+    "primary": null,
+    "secondary": null,
+    "mono": null,
+    "scale": null
+  },
+  "spacing": {
+    "base": null,
+    "scale": null
+  },
+  "components": {
+    "border_radius": null,
+    "shadows": null,
+    "transitions": null
+  },
+  "content": {
+    "copy_source": null,
+    "tone": null
+  }
+}
