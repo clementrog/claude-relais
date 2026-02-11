@@ -1,34 +1,46 @@
 ---
 name: claude-relais
-description: High-reasoning orchestration skill for Claude Code that runs guarded PLAN->BUILD->JUDGE loops with Cursor headless builder enforcement.
+description: Router-first Claude orchestration skill: fresh repos trigger guided setup, existing repos get next-step options, and BUILD is always dispatched to Cursor headless agent.
 ---
 
 # claude-relais
 
-Use this skill when the user wants an orchestration loop with strong guardrails, explicit contracts, and fast delivery.
+Use this skill for deterministic orchestration with a strict split:
+- Claude orchestrates/plans/verifies
+- Cursor builds code
 
-## Default execution profile
+## Entry Router (first action every session)
 
-- Orchestrator reasoning: Claude Opus (`opus-4.6` by default)
-- Builder mode: `cursor` (headless agent, enforced)
-- Loop contract: finite ticks only, explicit verdicts, deterministic stop behavior
+1. If user input looks like a direct CLI command (`envoi ...`), execute it via shell instead of treating it as planning text.
+2. Else inspect orchestration state under `relais/`.
+3. Route:
+- Fresh repo or missing `relais/ROADMAP.json` -> guided setup/onboarding
+- Existing state -> show next-step options and continue loop
 
-## Workflow
+## Loop Contract
 
-1. Establish state from `relais/STATE.json` and current git status.
-2. Plan a bounded task with explicit scope and acceptance checks.
-3. Dispatch BUILD with the selected builder mode.
-4. Judge from repo truth (git diff + verify commands), not builder claims.
-5. Persist report + next state and stop or continue based on verdict.
+1. Router/Setup
+2. PLAN
+3. DISPATCH
+4. BUILD (Cursor only)
+5. VERIFY
+6. UPDATE roadmap/state
+7. Continue or stop based on mode
 
-## Guardrails (non-negotiable)
+## Mode Semantics
 
-- Keep strict contract ownership between orchestrator and builder.
-- Enforce write scope and forbidden path checks every tick.
-- Treat verification failures and unsafe diffs as hard stops.
-- Keep loop finite and restart-safe via persisted state.
+- `task`: stop after one successful task
+- `milestone`: continue until active milestone is done, then stop
+- `autonomous`: continue until blocked/limits/signal
 
-## Files this skill expects
+## Non-negotiable Guardrails
+
+- BUILD must be handled by Cursor headless agent.
+- Do not use Claude Task/sub-agent as BUILD worker.
+- Never mark roadmap complete while pending milestones remain.
+- Verify from git truth, not builder claims.
+
+## Files this skill uses
 
 - `BOOT.txt`
 - `ORCHESTRATOR.md`
@@ -36,6 +48,7 @@ Use this skill when the user wants an orchestration loop with strong guardrails,
 - `relais/STATE.json`
 - `relais/TASK.json`
 - `relais/REPORT.json`
+- `relais/ROADMAP.json`
 
 ## References
 

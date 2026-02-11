@@ -62,6 +62,9 @@ fi
 INSTALL_DIR="${DEST_BASE}/${SKILL_NAME}"
 REQUIRED=(
   "SKILL.md"
+  "BOOT.txt"
+  "ORCHESTRATOR.md"
+  "claude.md"
   "agents/openai.yaml"
   "references/how-it-works.md"
   "references/configuration.md"
@@ -86,6 +89,25 @@ if command -v jq >/dev/null 2>&1; then
     echo "${PREFIX}:FAIL:config_invalid:config.local.json missing required keys."
     exit 1
   fi
+fi
+
+if ! rg -q "^RELAIS v6" "${INSTALL_DIR}/BOOT.txt"; then
+  echo "${PREFIX}:FAIL:protocol_mismatch:BOOT.txt is not RELAIS v6."
+  exit 1
+fi
+
+if ! rg -q "builder\\.mode" "${INSTALL_DIR}/ORCHESTRATOR.md" || \
+   ! rg -q "cursor" "${INSTALL_DIR}/ORCHESTRATOR.md" || \
+   ! rg -q "Task/sub-agent" "${INSTALL_DIR}/ORCHESTRATOR.md"; then
+  echo "${PREFIX}:FAIL:protocol_mismatch:ORCHESTRATOR.md missing cursor-only guardrail."
+  exit 1
+fi
+
+LEGACY_COMMAND_FILE="${HOME}/.claude/commands/claude-relais.md"
+if [[ -f "${LEGACY_COMMAND_FILE}" ]]; then
+  echo "${PREFIX}:FAIL:duplicate_entrypoint:legacy command file exists at ${LEGACY_COMMAND_FILE}"
+  echo "${PREFIX}:FAIL:remediation:rm ${LEGACY_COMMAND_FILE}"
+  exit 1
 fi
 
 if [[ "$RUN_PREFLIGHT" -eq 1 ]]; then

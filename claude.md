@@ -1,97 +1,85 @@
-# Claude Code — RELAIS v3
+# Claude Code - RELAIS v6
 
-**Auto-start:** Read `/relais/STATE.json` immediately and act on current phase.
-
----
-
-## CONTRACT OWNERSHIP
-
-| Mode | Can Write | Cannot Write |
-|------|-----------|--------------|
-| **Orchestrator mode** | `STATE.json`, `TASK.json`, `ROADMAP.json`, `REVIEW.json`, `DESIGN-CONTRACT.json` | Code files |
-| **Builder mode** | Code (in scope) + `REPORT.json` | Other `/relais/*` files |
-
-**Violations count toward 3-attempt limit.**
-
-**Read restriction:** Never open `.env*`, `*.key`, `*.pem` — even "for context" = violation.
+Auto-start behavior:
+1. Run entry router
+2. Onboard if fresh
+3. Otherwise continue loop
 
 ---
 
-## ROLE DETECTION
+## Non-negotiable
 
-| Signal | Mode |
-|--------|------|
-| `phase: BUILD` in STATE | **Builder** — execute TASK.json |
-| Any other phase | **Orchestrator** — manage contracts |
-| User says "build", "implement" | Builder override |
-| User says "plan", "review", "verify" | Orchestrator override |
+- BUILD must always be dispatched to Cursor headless agent.
+- Claude does not serve as code-writing builder in orchestrator flow.
+- Do not collapse roadmap to only current milestone.
 
 ---
 
-## CORE vs OPTIONAL
+## Runtime Paths
 
-**Core (always):** STATE + TASK + REPORT + scope + verify + 3 attempts
+### Path A: CLI passthrough
+If user message is an explicit command beginning with `envoi `, execute it via shell.
+Do not reinterpret it as planning text.
 
-**Optional:** ROADMAP (planning), DESIGN-CONTRACT (UI), REVIEW (escalation), skills
-
-Start simple. Add modules as needed.
-
----
-
-## ORCHESTRATOR MODE
-
-| Phase | Action |
-|-------|--------|
-| IDLE | Check ROADMAP or ask user for task |
-| PLAN | List tasks, check batch opportunity (2+ LOW, independent, no conflicts) |
-| DISPATCH | Write TASK.json, create branch |
-| VERIFY | **Preflight:** confirm branch matches STATE. Git diff, verify commands |
-| REVIEW | Write REVIEW.json, wait for verdict |
-| MERGE | Squash merge to main, cleanup |
-| HALT | Explain failures, wait for human |
-
-**Attempt rule:** Only increment `attempt` when rejecting REPORT.
+### Path B: Orchestration
+If user message is not explicit CLI command:
+- Read `relais/STATE.json` and `relais/ROADMAP.json`
+- Route to onboarding or continuation
 
 ---
 
-## BUILDER MODE
+## State Requirements (`relais/STATE.json`)
 
-1. Read TASK.json
-2. Check `mode`:
-   - `"batch"` → execute all in `batch[]` order, report once
-   - Otherwise → execute `subtasks[]` (use `implementation{}` if provided)
-3. Never touch files in `scope.forbidden`
-4. Never read files in `scope.read_forbidden`
-5. Run verify commands
-6. Write REPORT.json with:
-   - `git_diff_files` (run `git diff --name-only main...HEAD`)
-   - `verify.output` (last 20 lines)
-7. Say "done"
-
-**Batch partial:** If blocked mid-batch, set `status: "PARTIAL"` and list completed tasks.
+Required keys:
+- `v: 6`
+- `phase: ROUTER|ONBOARD|PLAN|DISPATCH|BUILD|VERIFY|UPDATE|IDLE|HALT`
+- `mode: task|milestone|autonomous`
+- `builder_driver: cursor`
+- `setup_complete: boolean`
+- `current_milestone_id: string|null`
+- `current_task_id: string|null`
+- `attempt: number`
 
 ---
 
-## BATCH MODE
+## Continuation UX (existing state)
 
-**Conditions (all must be true):**
-- 2-5 pending tasks
-- All LOW risk
-- All independently shippable
-- No overlapping write scopes
-- < 3 hours combined
-
-**Branch:** `batch/[milestone]-[desc]`
-
-**Report once** after all tasks complete.
+Before planning/building, offer next-step options:
+1. Continue current task
+2. Plan next task
+3. Resolve blockers
+4. Change mode
+5. Rebuild roadmap from updated PRD
 
 ---
 
-## RULES
+## Mode Completion Semantics
 
-1. Contract ownership — only write your designated files
-2. Forbidden reads = violation
-3. Git diff every verify (orchestrator)
-4. Include evidence in REPORT (builder)
-5. Preflight branch check before verify
-6. 3 attempts → HALT
+- `task`: one task then stop (`IDLE`)
+- `milestone`: loop until active milestone done then stop (`IDLE`)
+- `autonomous`: continue until blocked/limits/signal
+
+---
+
+## BUILD Evidence Requirements
+
+`relais/REPORT.json` must include:
+- `builder.mode = cursor`
+- `builder.dispatch.command`
+- `builder.dispatch.args`
+- `builder.dispatch.exit_code`
+- `builder.logs.stdout_path`
+- `builder.logs.stderr_path`
+- `git_diff_files`
+- `verify.output_tail`
+
+If missing, reject report and increment attempt.
+
+---
+
+## Safety and Verification
+
+- Scope truth comes from git diff, not builder claims.
+- Preflight branch must match `STATE.branch`.
+- `attempt` increments only on rejected report.
+- Stop at 3 failed attempts (`HALT`).

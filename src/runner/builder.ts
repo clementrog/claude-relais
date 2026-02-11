@@ -412,6 +412,31 @@ function validateOutputFilePath(path: string, workspaceDir: string): { valid: bo
   return { valid: true };
 }
 
+function normalizeCursorArgs(
+  rawArgs: string[],
+  driverKind: 'external' | 'cursor_agent'
+): { args: string[]; replacedLegacyPromptFlag: boolean; injectedPrintFlag: boolean } {
+  let replacedLegacyPromptFlag = false;
+  const args = rawArgs.map((arg) => {
+    if (arg === '--prompt' || arg.startsWith('--prompt=')) {
+      replacedLegacyPromptFlag = true;
+      return '--print';
+    }
+    return arg;
+  });
+
+  let injectedPrintFlag = false;
+  if (driverKind === 'cursor_agent') {
+    const hasPrintFlag = args.includes('--print') || args.includes('-p');
+    if (!hasPrintFlag) {
+      args.push('--print');
+      injectedPrintFlag = true;
+    }
+  }
+
+  return { args, replacedLegacyPromptFlag, injectedPrintFlag };
+}
+
 /**
  * Handles cursor builder mode.
  *
@@ -445,6 +470,15 @@ async function handleCursorMode(
     };
   }
 
+  const driverKind = cursor.driver_kind ?? 'external';
+  const normalizedArgs = normalizeCursorArgs(cursor.args, driverKind);
+  if (normalizedArgs.replacedLegacyPromptFlag) {
+    console.warn('[BUILD] Detected legacy Cursor flag --prompt; auto-migrated to --print.');
+  }
+  if (normalizedArgs.injectedPrintFlag) {
+    console.warn('[BUILD] Cursor agent args missing --print; auto-injected for headless execution.');
+  }
+
   // Preflight: Validate output_file path safety
   const outputFileValidation = validateOutputFilePath(cursor.output_file, config.workspace_dir);
   if (!outputFileValidation.valid) {
@@ -463,7 +497,7 @@ async function handleCursorMode(
   }
 
   // Preflight: Verify command exists and is executable
-  const policyDecision = evaluateCommandPolicy(config, cursor.command, cursor.args);
+  const policyDecision = evaluateCommandPolicy(config, cursor.command, normalizedArgs.args);
   if (policyDecision.decision === 'deny') {
     return {
       success: false,
@@ -498,7 +532,6 @@ async function handleCursorMode(
     config.workspace_dir,
     config.builder.claude_code.builder_result_schema_file
   );
-  const driverKind = cursor.driver_kind ?? 'external';
   const builderContractEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ENVOI_BUILDER_PROTOCOL: 'v2_machine',
@@ -528,7 +561,7 @@ async function handleCursorMode(
 
   // Spawn external driver
   try {
-    const args = [...cursor.args];
+    const args = [...normalizedArgs.args];
     if (cursor.driver_kind === 'cursor_agent') {
       const agentPrompt = [
         'ENVOI_BUILDER_PROTOCOL=v2_machine',

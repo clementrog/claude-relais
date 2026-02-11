@@ -54,6 +54,7 @@ export const DEFAULT_WORKSPACE_WRITE_PREFIXES = [
 
 export const DEFAULT_DENY_PREFIXES = [
   'rm',
+  'sudo',
   'sudo rm',
   'git reset --hard',
   'git checkout --',
@@ -161,7 +162,7 @@ function classifyGitCommand(tokens: string[]): CommandClass {
 export function classifyCommand(tokens: string[]): CommandClass {
   const cmd = tokens[0] ?? '';
   if (cmd === 'git') return classifyGitCommand(tokens);
-  if (cmd === 'rm' || cmd === 'mkfs' || cmd === 'dd') return 'destructive';
+  if (cmd === 'rm' || cmd === 'sudo' || cmd === 'mkfs' || cmd === 'dd') return 'destructive';
   if (cmd === 'curl' || cmd === 'wget' || cmd === 'npm' || cmd === 'pnpm' || cmd === 'yarn' || cmd === 'bun' || cmd === 'gh') {
     return 'network';
   }

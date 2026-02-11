@@ -147,7 +147,16 @@ cat > "${INSTALL_DIR}/config.local.json" <<EOF
 }
 EOF
 
+BOOT_MARKER="$(head -n 1 "${INSTALL_DIR}/BOOT.txt" 2>/dev/null || true)"
+LEGACY_COMMAND_FILE="${HOME}/.claude/commands/claude-relais.md"
+
 echo "Installed skill files to ${INSTALL_DIR}"
+echo "Protocol: ${BOOT_MARKER}"
+if [[ -f "${LEGACY_COMMAND_FILE}" ]]; then
+  echo "WARNING: legacy command file detected at ${LEGACY_COMMAND_FILE}"
+  echo "         This can cause duplicate or conflicting /claude-relais behavior."
+  echo "         Remove it with: rm ${LEGACY_COMMAND_FILE}"
+fi
 echo "Next:"
 echo "  1) Restart Claude Code (if already running)"
 echo "  2) Start a session and invoke the claude-relais skill"

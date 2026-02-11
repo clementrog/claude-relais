@@ -46,6 +46,13 @@ describe('command policy', () => {
     expect(result.classification).toBe('destructive');
   });
 
+  it('denies sudo-prefixed commands', () => {
+    const config = createMockConfig({ workspace_dir: 'relais' } as any);
+    const result = evaluateCommandPolicy(config as any, 'sudo', ['ls', '/']);
+    expect(result.decision).toBe('deny');
+    expect(result.classification).toBe('destructive');
+  });
+
   it('allows trusted network prefixes in fast profile', () => {
     const config = createMockConfig({
       workspace_dir: 'relais',

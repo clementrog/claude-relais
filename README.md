@@ -12,10 +12,18 @@ For many users, this split delivers high sustained output at roughly the cost of
 
 ## How it works
 
-1. **PLAN**: orchestrator defines one bounded task and scope.
-2. **BUILD**: builder executes inside allowed boundaries.
-3. **JUDGE**: orchestrator verifies against git truth and verify commands.
-4. **REPORT**: state and verdict persist so loops can resume safely.
+1. **ROUTER**: Claude routes input:
+- explicit `envoi ...` commands are executed directly; otherwise it checks `relais/` state.
+2. **ONBOARD OR CONTINUE**:
+- fresh repo or missing roadmap -> guided onboarding (mode + PRD + roadmap); existing state -> next-step options.
+3. **PLAN**: orchestrator defines one bounded task and scope.
+4. **BUILD**: task is dispatched to Cursor headless agent (mandatory).
+5. **VERIFY/UPDATE**: Claude verifies against git truth, updates roadmap/state, and loops.
+
+Mode stop conditions:
+- `task`: stop after one successful task
+- `milestone`: stop when active milestone is done
+- `autonomous`: continue until blocked/limit/signal
 
 ## Requirements
 
@@ -61,6 +69,14 @@ Defaults:
 
 - orchestrator model: `opus-4.6`
 - builder mode: `cursor` (enforced; non-cursor builder tasks are blocked)
+- destructive command gates on by default:
+`deny_prefixes` includes `rm`, `sudo`, `git reset --hard`, `git checkout --`, `git clean -fd`, `git clean -fdx`, `mkfs`, `dd`
+- `require_explicit_for_destructive: true`
+- preflight blocks tracked symlinks that resolve outside repo root
+
+Permission note:
+- do not auto-enable global `--dangerously-skip-permissions` at skill load
+- use `envoi autonomy --set fast` for low-friction mode with guardrails
 
 Override at install time:
 
@@ -79,6 +95,10 @@ Custom install location:
 - Missing Claude CLI/auth: run login flow, then `./scripts/preflight.sh`
 - Cursor auth warning: run `cursor agent login` then retry preflight
 - Skill not picked up: ensure `<skills-dir>/claude-relais/SKILL.md` exists, then restart Claude Code
+- Duplicate `/claude-relais` entries or odd behavior:
+```bash
+rm ~/.claude/commands/claude-relais.md
+```
 - Reinstall cleanly:
 
 ```bash

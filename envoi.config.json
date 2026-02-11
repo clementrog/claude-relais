@@ -50,6 +50,7 @@
       ],
       "deny_prefixes": [
         "rm",
+        "sudo",
         "sudo rm",
         "git reset --hard",
         "git checkout --",

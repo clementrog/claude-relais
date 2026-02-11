@@ -1,23 +1,35 @@
 # How claude-relais Works
 
-`claude-relais` is an orchestration skill for Claude Code that separates planning, building, and judging into explicit contracts.
+`claude-relais` runs a router-first orchestration loop with strict role separation:
+
+- Claude: route, plan, verify, update roadmap/state
+- Cursor: implement code changes during BUILD
+
+## Entry behavior
+
+On each user message:
+
+1. If the message is an explicit CLI command (`envoi ...`), execute it directly.
+2. Otherwise route by repo state:
+- Fresh/missing roadmap: guided onboarding
+- Existing state: next-step options + continuation
 
 ## Core loop
 
-1. **PLAN**: Orchestrator defines one bounded task and scope.
-2. **BUILD**: Builder executes implementation inside allowed paths.
-3. **JUDGE**: Orchestrator verifies using git truth + verify commands.
+`ROUTER -> ONBOARD -> PLAN -> DISPATCH -> BUILD -> VERIFY -> UPDATE`
 
-Each cycle is finite and produces a report with a deterministic verdict (`success`, `stop`, or `blocked`).
+Then either continue or stop based on mode:
+- `task`: stop after one task
+- `milestone`: stop at milestone boundary
+- `autonomous`: continue until blocked/limit/signal
 
-## Why it is fast and safe
+## Why it is safe
 
-- **Fast**: Cursor headless builder can execute broad edits quickly.
-- **Safe**: Scope, diff, and verification checks gate progress before merge.
-- **Stable**: State and reports are persisted under `relais/` so sessions can resume cleanly.
+- BUILD is cursor-only (no Claude builder fallback)
+- Contracts are explicit (`STATE`, `TASK`, `REPORT`, `ROADMAP`)
+- Verification uses git truth and task verify commands
+- Scope violations and failed reports increment attempts and can halt
 
-## Contract ownership
+## Required build evidence
 
-- Orchestrator owns planning/control contracts (`STATE`, `TASK`, roadmap/review contracts).
-- Builder owns code changes and `REPORT`.
-- Crossing those boundaries is treated as a protocol violation.
+`relais/REPORT.json` must show cursor dispatch details and verification evidence before orchestration can continue.
