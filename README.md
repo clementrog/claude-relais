@@ -10,19 +10,6 @@ Heavy reasoning models are excellent for planning, but slower and more limit-int
 
 For many users, this split delivers high sustained output at roughly the cost of two standard plans (around ~$40/month combined), depending on provider pricing, plan limits, and usage patterns.
 
-## Why this exists
-
-Most agent loops either:
-
-- use one heavy model for everything (good reasoning, slower implementation, higher limit pressure), or
-- use faster builders without strong orchestration and safety rails.
-
-`claude-relais` combines both:
-
-- **Speed at implementation time:** Cursor builder handles clear, bounded tasks quickly.
-- **High-quality planning:** Claude handles decomposition, sequencing, and boundary setting.
-- **Guardrails and determinism:** scope/diff/verify checks gate unsafe changes, and every tick persists state in `relais/`.
-
 ## How it works
 
 1. **PLAN**: orchestrator defines one bounded task and scope.
