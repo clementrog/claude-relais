@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -89,7 +89,7 @@ const mockReleaseLock = vi.mocked(releaseLock);
 const mockInvokeClaudeCode = vi.mocked(invokeClaudeCode);
 const mockAtomicWriteJson = vi.mocked(atomicWriteJson);
 
-function createMockConfig(workspaceDir: string): RelaisConfig {
+function createMockConfig(workspaceDir: string): EnvoiConfig {
   return {
     version: '1',
     workspace_dir: workspaceDir,
@@ -170,7 +170,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
       max_consecutive_failures: 3,
     },
     history: { enabled: false, retention_count: 50, dir: 'relais/history', max_mb: 100, include_diff_patch: false, include_verify_log: false },
-  } as RelaisConfig;
+  } as EnvoiConfig;
 }
 
 describe('F031: orchestrator_timeout_persists_report', () => {

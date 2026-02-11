@@ -36,33 +36,33 @@ describe('initCommand', () => {
   it('should create workspace directory structure', async () => {
     await initCommand();
 
-    expect(await fileExists('relais')).toBe(true);
-    expect(await fileExists('relais/prompts')).toBe(true);
-    expect(await fileExists('relais/schemas')).toBe(true);
-    expect(await fileExists('relais/history')).toBe(true);
+    expect(await fileExists('envoi')).toBe(true);
+    expect(await fileExists('envoi/prompts')).toBe(true);
+    expect(await fileExists('envoi/schemas')).toBe(true);
+    expect(await fileExists('envoi/history')).toBe(true);
   });
 
   it('should copy prompt templates', async () => {
     await initCommand();
 
-    expect(await fileExists('relais/prompts/orchestrator.system.txt')).toBe(true);
-    expect(await fileExists('relais/prompts/orchestrator.user.txt')).toBe(true);
-    expect(await fileExists('relais/prompts/builder.system.txt')).toBe(true);
-    expect(await fileExists('relais/prompts/builder.user.txt')).toBe(true);
+    expect(await fileExists('envoi/prompts/orchestrator.system.txt')).toBe(true);
+    expect(await fileExists('envoi/prompts/orchestrator.user.txt')).toBe(true);
+    expect(await fileExists('envoi/prompts/builder.system.txt')).toBe(true);
+    expect(await fileExists('envoi/prompts/builder.user.txt')).toBe(true);
   });
 
   it('should copy schema files', async () => {
     await initCommand();
 
-    expect(await fileExists('relais/schemas/task.schema.json')).toBe(true);
-    expect(await fileExists('relais/schemas/builder_result.schema.json')).toBe(true);
-    expect(await fileExists('relais/schemas/report.schema.json')).toBe(true);
+    expect(await fileExists('envoi/schemas/task.schema.json')).toBe(true);
+    expect(await fileExists('envoi/schemas/builder_result.schema.json')).toBe(true);
+    expect(await fileExists('envoi/schemas/report.schema.json')).toBe(true);
   });
 
   it('should initialize STATE.json with correct structure', async () => {
     await initCommand();
 
-    const statePath = 'relais/STATE.json';
+    const statePath = 'envoi/STATE.json';
     expect(await fileExists(statePath)).toBe(true);
 
     const state = JSON.parse(await readFile(statePath, 'utf-8'));
@@ -80,14 +80,14 @@ describe('initCommand', () => {
     expect(typeof state.ts).toBe('string');
   });
 
-  it('should create relais.config.json', async () => {
+  it('should create envoi.config.json', async () => {
     await initCommand();
 
-    const configPath = 'relais.config.json';
+    const configPath = 'envoi.config.json';
     expect(await fileExists(configPath)).toBe(true);
 
     const config = JSON.parse(await readFile(configPath, 'utf-8'));
-    expect(config.workspace_dir).toBe('relais');
+    expect(config.workspace_dir).toBe('envoi');
     expect(config.runner).toBeDefined();
   });
 
@@ -98,9 +98,9 @@ describe('initCommand', () => {
     expect(await fileExists(gitignorePath)).toBe(true);
 
     const content = await readFile(gitignorePath, 'utf-8');
-    expect(content).toContain('# Relais runner-owned (auto-generated)');
-    expect(content).toContain('relais/REPORT.json');
-    expect(content).toContain('relais/STATE.json');
+    expect(content).toContain('# Envoi runner-owned (auto-generated)');
+    expect(content).toContain('envoi/REPORT.json');
+    expect(content).toContain('envoi/STATE.json');
   });
 
   it('should not overwrite existing files without --force', async () => {
@@ -108,13 +108,13 @@ describe('initCommand', () => {
     await initCommand();
 
     // Modify STATE.json
-    const statePath = 'relais/STATE.json';
+    const statePath = 'envoi/STATE.json';
     const originalState = JSON.parse(await readFile(statePath, 'utf-8'));
     originalState.phase = 'MODIFIED';
     await require('node:fs/promises').writeFile(statePath, JSON.stringify(originalState, null, 2));
 
-    // Try to initialize again without force
-    await expect(initCommand()).rejects.toThrow();
+    // Re-running start should be idempotent and not throw
+    await expect(initCommand()).resolves.toBeUndefined();
 
     // Verify STATE.json was not overwritten
     const state = JSON.parse(await readFile(statePath, 'utf-8'));
@@ -126,7 +126,7 @@ describe('initCommand', () => {
     await initCommand();
 
     // Modify STATE.json
-    const statePath = 'relais/STATE.json';
+    const statePath = 'envoi/STATE.json';
     const modifiedState = JSON.parse(await readFile(statePath, 'utf-8'));
     modifiedState.phase = 'MODIFIED';
     await require('node:fs/promises').writeFile(statePath, JSON.stringify(modifiedState, null, 2));
@@ -145,7 +145,7 @@ describe('initCommand', () => {
     expect(await fileExists('custom-workspace')).toBe(true);
     expect(await fileExists('custom-workspace/STATE.json')).toBe(true);
 
-    const config = JSON.parse(await readFile('relais.config.json', 'utf-8'));
+    const config = JSON.parse(await readFile('envoi.config.json', 'utf-8'));
     expect(config.workspace_dir).toBe('custom-workspace');
   });
 
@@ -158,6 +158,6 @@ describe('initCommand', () => {
     const content = await readFile('.gitignore', 'utf-8');
     expect(content).toContain('node_modules/');
     expect(content).toContain('.env');
-    expect(content).toContain('# Relais runner-owned (auto-generated)');
+    expect(content).toContain('# Envoi runner-owned (auto-generated)');
   });
 });

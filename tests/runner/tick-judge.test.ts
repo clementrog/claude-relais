@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Mock dependencies
 vi.mock('@/lib/lock.js', () => ({
@@ -83,7 +83,7 @@ vi.mock('@/runner/builder.js');
 import { runOrchestrator } from '@/runner/orchestrator.js';
 import { runBuilder } from '@/runner/builder.js';
 import { releaseLock } from '@/lib/lock.js';
-import { rollbackToCommit } from '@/lib/rollback.js';
+import { rollbackToCommit, verifyCleanWorktree } from '@/lib/rollback.js';
 import {
   getTouchedFiles,
   checkScopeViolations,
@@ -96,13 +96,14 @@ const mockRunOrchestrator = vi.mocked(runOrchestrator);
 const mockRunBuilder = vi.mocked(runBuilder);
 const mockReleaseLock = vi.mocked(releaseLock);
 const mockRollbackToCommit = vi.mocked(rollbackToCommit);
+const mockVerifyCleanWorktree = vi.mocked(verifyCleanWorktree);
 const mockGetTouchedFiles = vi.mocked(getTouchedFiles);
 const mockCheckScopeViolations = vi.mocked(checkScopeViolations);
 const mockComputeBlastRadius = vi.mocked(computeBlastRadius);
 const mockCheckDiffLimits = vi.mocked(checkDiffLimits);
 const mockCheckHeadMoved = vi.mocked(checkHeadMoved);
 
-const createMockConfig = (): RelaisConfig => ({
+const createMockConfig = (): EnvoiConfig => ({
   v: 2,
   workspace_dir: '/tmp/test-workspace',
   runner: {
@@ -162,7 +163,7 @@ const createMockConfig = (): RelaisConfig => ({
     max_consecutive_failures: 3,
   },
   history: { enabled: true, retention_count: 50, dir: 'relais/history' },
-} as RelaisConfig);
+} as EnvoiConfig);
 
 const mockTask = {
   task_id: 'test-task',
@@ -185,6 +186,8 @@ describe('runTick JUDGE phase', () => {
     mockComputeBlastRadius.mockReturnValue({ files_touched: 0, lines_added: 0, lines_deleted: 0, new_files: 0 });
     mockCheckScopeViolations.mockReturnValue({ ok: true, stopCode: null, violatingFiles: [], reason: null });
     mockCheckDiffLimits.mockReturnValue({ ok: true, stopCode: null, blastRadius: { files_touched: 0, lines_added: 0, lines_deleted: 0, new_files: 0 }, reason: null });
+    mockRollbackToCommit.mockReturnValue({ ok: true, restoredCommit: 'abc123', removedFiles: [], error: null });
+    mockVerifyCleanWorktree.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -339,5 +342,136 @@ describe('runTick JUDGE phase', () => {
     expect(report.budgets.ticks).toBe(1);
     expect(report.budgets.orchestrator_calls).toBe(1);
     expect(report.budgets.builder_calls).toBe(1);
+  });
+
+  it('should return BLOCKED_ROLLBACK_FAILED when rollback fails', async () => {
+    mockGetTouchedFiles.mockReturnValue({
+      modified: ['.git/config'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['.git/config'],
+    });
+    mockComputeBlastRadius.mockReturnValue({ files_touched: 1, lines_added: 5, lines_deleted: 0, new_files: 0 });
+    mockCheckScopeViolations.mockReturnValue({
+      ok: false,
+      stopCode: 'STOP_SCOPE_VIOLATION_FORBIDDEN',
+      violatingFiles: ['.git/config'],
+      reason: 'Touched forbidden path',
+    });
+    // Mock rollback to fail
+    mockRollbackToCommit.mockReturnValue({
+      ok: false,
+      restoredCommit: 'abc123',
+      removedFiles: [],
+      error: 'git reset failed',
+    });
+
+    const config = createMockConfig();
+    const report = await runTick(config);
+
+    expect(report.verdict).toBe('blocked');
+    expect(report.code).toBe('BLOCKED_ROLLBACK_FAILED');
+    expect(mockRollbackToCommit).toHaveBeenCalled();
+  });
+
+  it('should return BLOCKED_ROLLBACK_DIRTY when rollback succeeds but worktree is dirty', async () => {
+    mockGetTouchedFiles.mockReturnValue({
+      modified: ['.git/config'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['.git/config'],
+    });
+    mockComputeBlastRadius.mockReturnValue({ files_touched: 1, lines_added: 5, lines_deleted: 0, new_files: 0 });
+    mockCheckScopeViolations.mockReturnValue({
+      ok: false,
+      stopCode: 'STOP_SCOPE_VIOLATION_FORBIDDEN',
+      violatingFiles: ['.git/config'],
+      reason: 'Touched forbidden path',
+    });
+    // Mock rollback to succeed but worktree to be dirty
+    mockRollbackToCommit.mockReturnValue({
+      ok: true,
+      restoredCommit: 'abc123',
+      removedFiles: [],
+      error: null,
+    });
+    mockVerifyCleanWorktree.mockReturnValue(false);
+
+    const config = createMockConfig();
+    const report = await runTick(config);
+
+    expect(report.verdict).toBe('blocked');
+    expect(report.code).toBe('BLOCKED_ROLLBACK_DIRTY');
+    expect(mockRollbackToCommit).toHaveBeenCalled();
+    expect(mockVerifyCleanWorktree).toHaveBeenCalled();
+  });
+
+  it('should return STOP code when rollback succeeds and worktree is clean', async () => {
+    mockGetTouchedFiles.mockReturnValue({
+      modified: ['.git/config'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['.git/config'],
+    });
+    mockComputeBlastRadius.mockReturnValue({ files_touched: 1, lines_added: 5, lines_deleted: 0, new_files: 0 });
+    mockCheckScopeViolations.mockReturnValue({
+      ok: false,
+      stopCode: 'STOP_SCOPE_VIOLATION_FORBIDDEN',
+      violatingFiles: ['.git/config'],
+      reason: 'Touched forbidden path',
+    });
+    // Mock rollback to succeed and worktree to be clean
+    mockRollbackToCommit.mockReturnValue({
+      ok: true,
+      restoredCommit: 'abc123',
+      removedFiles: [],
+      error: null,
+    });
+    mockVerifyCleanWorktree.mockReturnValue(true);
+
+    const config = createMockConfig();
+    const report = await runTick(config);
+
+    expect(report.verdict).toBe('stop');
+    expect(report.code).toBe('STOP_SCOPE_VIOLATION_FORBIDDEN');
+    expect(mockRollbackToCommit).toHaveBeenCalled();
+    expect(mockVerifyCleanWorktree).toHaveBeenCalled();
+  });
+
+  it('should return BLOCKED_ROLLBACK_FAILED for diff too large when rollback fails', async () => {
+    mockGetTouchedFiles.mockReturnValue({
+      modified: ['src/big.ts'],
+      added: [],
+      deleted: [],
+      renamed: [],
+      untracked: [],
+      all: ['src/big.ts'],
+    });
+    mockComputeBlastRadius.mockReturnValue({ files_touched: 1, lines_added: 1000, lines_deleted: 0, new_files: 0 });
+    mockCheckDiffLimits.mockReturnValue({
+      ok: false,
+      stopCode: 'STOP_DIFF_TOO_LARGE',
+      blastRadius: { files_touched: 1, lines_added: 1000, lines_deleted: 0, new_files: 0 },
+      reason: 'lines_changed exceeds limit',
+    });
+    // Mock rollback to fail
+    mockRollbackToCommit.mockReturnValue({
+      ok: false,
+      restoredCommit: 'abc123',
+      removedFiles: [],
+      error: 'git reset failed',
+    });
+
+    const config = createMockConfig();
+    const report = await runTick(config);
+
+    expect(report.verdict).toBe('blocked');
+    expect(report.code).toBe('BLOCKED_ROLLBACK_FAILED');
   });
 });

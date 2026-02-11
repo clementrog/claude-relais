@@ -90,7 +90,7 @@ describe('S001: Roundtrip validation', () => {
           params: {},
         },
         builder: {
-          mode: 'claude_code',
+          mode: 'cursor',
           max_turns: 8,
           instructions: 'Complete the task',
         },

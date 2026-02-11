@@ -6,8 +6,12 @@
 
 import { spawn, ChildProcess } from 'node:child_process';
 import type { ClaudeCodeCliConfig } from '../types/config.js';
-import type { ClaudeInvocation, ClaudeResponse } from '../types/claude.js';
+import type { ClaudeInvocation, ClaudeResponse, ClaudeTokenUsage } from '../types/claude.js';
 import { ClaudeError, InterruptedError } from '../types/claude.js';
+
+function isDebugEnabled(): boolean {
+  return process.env.ENVOI_DEBUG === '1';
+}
 
 /**
  * Builds CLI arguments array from config and invocation parameters.
@@ -63,7 +67,65 @@ export function buildClaudeArgs(
  * @returns Parsed result object with result field and optional subtype for errors
  * @throws {Error} If JSON parsing fails
  */
-export function parseClaudeResponse(stdout: string): { result: string; raw: object; subtype?: string } {
+function toNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseUsageShape(candidate: unknown): ClaudeTokenUsage | null {
+  if (typeof candidate !== 'object' || candidate === null) return null;
+  const usage = candidate as Record<string, unknown>;
+
+  const input =
+    toNumberOrNull(usage.input_tokens) ??
+    toNumberOrNull(usage.prompt_tokens) ??
+    toNumberOrNull(usage.inputTokens);
+  const output =
+    toNumberOrNull(usage.output_tokens) ??
+    toNumberOrNull(usage.completion_tokens) ??
+    toNumberOrNull(usage.outputTokens);
+  const total = toNumberOrNull(usage.total_tokens) ?? toNumberOrNull(usage.totalTokens);
+  const cacheCreation = toNumberOrNull(usage.cache_creation_input_tokens);
+  const cacheRead = toNumberOrNull(usage.cache_read_input_tokens);
+
+  const computedTotal =
+    total ??
+    (input !== null && output !== null ? input + output : null);
+
+  const hasAnyValue =
+    input !== null ||
+    output !== null ||
+    computedTotal !== null ||
+    cacheCreation !== null ||
+    cacheRead !== null;
+
+  if (!hasAnyValue) return null;
+
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    total_tokens: computedTotal,
+    cache_creation_input_tokens: cacheCreation,
+    cache_read_input_tokens: cacheRead,
+  };
+}
+
+function extractTokenUsage(raw: Record<string, unknown>): ClaudeTokenUsage | null {
+  const candidates: unknown[] = [
+    raw.usage,
+    raw.token_usage,
+    raw.metrics,
+    (raw.metrics as Record<string, unknown> | undefined)?.usage,
+    (raw.message as Record<string, unknown> | undefined)?.usage,
+  ];
+
+  for (const candidate of candidates) {
+    const usage = parseUsageShape(candidate);
+    if (usage) return usage;
+  }
+  return null;
+}
+
+export function parseClaudeResponse(stdout: string): { result: string; raw: object; subtype?: string; tokenUsage: ClaudeTokenUsage | null } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout);
@@ -81,20 +143,24 @@ export function parseClaudeResponse(stdout: string): { result: string; raw: obje
   // Return empty result so callers can handle based on subtype
   if (typeof obj.result !== 'string') {
     const subtype = typeof obj.subtype === 'string' ? obj.subtype : undefined;
-    if (process.env.RELAIS_DEBUG === '1') {
+    const tokenUsage = extractTokenUsage(obj);
+    if (isDebugEnabled()) {
       console.log(`[CLAUDE_DEBUG] No result field in response, subtype=${subtype}`);
     }
     return {
       result: '',
       raw: parsed as object,
       subtype,
+      tokenUsage,
     };
   }
 
+  const tokenUsage = extractTokenUsage(obj);
   return {
     result: obj.result,
     raw: parsed as object,
     subtype: typeof obj.subtype === 'string' ? obj.subtype : undefined,
+    tokenUsage,
   };
 }
 
@@ -143,7 +209,7 @@ export async function invokeClaudeCode(
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    if (process.env.RELAIS_DEBUG === '1') {
+    if (isDebugEnabled()) {
       console.log(`[CLAUDE_DEBUG] Spawned PID: ${child.pid}`);
     }
 
@@ -168,7 +234,7 @@ export async function invokeClaudeCode(
 
     // Track if child has exited
     child.on('exit', (code, signal) => {
-      if (process.env.RELAIS_DEBUG === '1') {
+      if (isDebugEnabled()) {
         console.log(`[CLAUDE_DEBUG] Exit: code=${code}, signal=${signal}`);
       }
       exited = true;
@@ -253,9 +319,10 @@ export async function invokeClaudeCode(
           exitCode,
           durationMs,
           stderr,
+          tokenUsage: parsed.tokenUsage,
         });
       } catch (error) {
-        if (process.env.RELAIS_DEBUG === '1') {
+        if (isDebugEnabled()) {
           console.log(`[CLAUDE_DEBUG] Parse failed. stdout (first 2000 chars):\n${stdout.slice(0, 2000)}`);
         }
         reject(

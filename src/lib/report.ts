@@ -1,5 +1,5 @@
 /**
- * Report generation module for relais tick execution results.
+ * Report generation module for envoi tick execution results.
  *
  * Provides functions to generate REPORT.json containing complete tick data:
  * run_id, timestamps, task info, verdict, code, blast_radius, scope check,
@@ -17,6 +17,7 @@ import type { VerificationRun as VerifyRun } from './verify.js';
 import type { VerificationTemplate } from '../types/config.js';
 import { atomicWriteJson, AtomicFsError } from './fs.js';
 import { getHeadCommit } from './git.js';
+import { formatDisplayState } from './verdict_labels.js';
 
 /**
  * Generates a unique run ID for a tick.
@@ -252,14 +253,7 @@ export async function writeReport(report: ReportData, filePath: string): Promise
  * @returns Formatted verdict string
  */
 function formatVerdict(verdict: Verdict, code: ReportCode): string {
-  if (verdict === 'success') {
-    return '✓ SUCCESS';
-  } else if (verdict === 'stop') {
-    return `✗ STOP: ${code}`;
-  } else if (verdict === 'blocked') {
-    return `⚠ BLOCKED: ${code}`;
-  }
-  return `${verdict}: ${code}`;
+  return formatDisplayState(verdict, code);
 }
 
 /**
@@ -275,7 +269,7 @@ export function renderReportMarkdown(report: ReportData): string {
   const lines: string[] = [];
 
   // Header
-  lines.push('# Relais Run Report');
+  lines.push('# Envoi Run Report');
   lines.push('');
 
   // Summary section

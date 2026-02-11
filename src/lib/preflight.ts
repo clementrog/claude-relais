@@ -7,11 +7,12 @@
 
 import { stat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { PreflightResult, BlockedCode } from '../types/preflight.js';
-import { cleanupTmpFiles } from './fs.js';
+import { cleanupTmpFiles, isGlobPatternSafe } from './fs.js';
 import { isGitRepo, isWorktreeCleanExcluding, getHeadCommit } from './git.js';
 import { readWorkspaceState } from './workspace_state.js';
+import { resolveInWorkspace } from './paths.js';
 
 /**
  * Creates a blocked PreflightResult with the given code and reason.
@@ -88,7 +89,7 @@ async function getDirectorySize(dirPath: string): Promise<number> {
  * 4. Check history size (vs config.history.max_mb)
  * 5. Budget check (placeholder - returns warning for now)
  *
- * @param config - The Relais configuration
+ * @param config - The Envoi configuration
  * @returns PreflightResult indicating success or blocked state
  *
  * @example
@@ -101,7 +102,7 @@ async function getDirectorySize(dirPath: string): Promise<number> {
  * console.log(`Preflight passed, base commit: ${result.base_commit}`);
  * ```
  */
-export async function runPreflight(config: RelaisConfig): Promise<PreflightResult> {
+export async function runPreflight(config: EnvoiConfig): Promise<PreflightResult> {
   const warnings: string[] = [];
   let baseCommit: string | null = null;
 
@@ -134,7 +135,19 @@ export async function runPreflight(config: RelaisConfig): Promise<PreflightResul
     }
   }
 
-  // 3. Cleanup .tmp files (crash artifacts)
+  // 3. Validate delete_tmp_glob pattern if configured
+  const deleteGlob = config.runner.crash_cleanup?.delete_tmp_glob;
+  if (deleteGlob && deleteGlob.trim() !== '') {
+    const globSafety = isGlobPatternSafe(deleteGlob);
+    if (!globSafety.safe) {
+      return blocked(
+        'BLOCKED_CRASH_RECOVERY_REQUIRED',
+        `Unsafe delete_tmp_glob pattern: ${globSafety.reason}`
+      );
+    }
+  }
+
+  // 4. Cleanup .tmp files (crash artifacts)
   try {
     const deleted = await cleanupTmpFiles(config.workspace_dir);
     if (deleted.length > 0) {
@@ -150,7 +163,7 @@ export async function runPreflight(config: RelaisConfig): Promise<PreflightResul
 
   // 4. Check history size vs cap
   if (config.history.enabled) {
-    const historyPath = join(config.workspace_dir, config.history.dir);
+    const historyPath = resolveInWorkspace(config.workspace_dir, config.history.dir);
     const historySizeBytes = await getDirectorySize(historyPath);
     const historySizeMb = historySizeBytes / (1024 * 1024);
     const maxMb = config.history.max_mb;

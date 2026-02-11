@@ -1,17 +1,34 @@
 {
-  "name": "relais",
-  "version": "1.0.0",
-  "description": "Deterministic orchestration runner for Claude Code: Brain → Hands → Judge",
+  "name": "claude-relais-skill",
+  "version": "1.0.10",
+  "description": "Legacy internal engine for claude-relais skill workflows",
+  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "relais": "dist/index.js"
+    "claude-relais": "dist/index.js"
+  },
+  "files": [
+    "README.md",
+    "SKILL.md",
+    "LICENSE",
+    "agents/**",
+    "references/**",
+    "scripts/install.sh",
+    "scripts/preflight.sh",
+    "scripts/smoke.sh",
+    "scripts/uninstall.sh"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
+    "pack:check": "node scripts/pack-check.mjs",
+    "prepack": "npm run -s build && node scripts/pack-check.mjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "test": "vitest",
+    "test": "pnpm -s build && vitest",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [

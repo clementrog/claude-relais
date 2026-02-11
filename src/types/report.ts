@@ -1,5 +1,5 @@
 /**
- * Report types for relais tick execution results.
+ * Report types for envoi tick execution results.
  *
  * REPORT.json is the canonical source of truth for tick outcomes.
  * REPORT.md is a deterministic rendering of REPORT.json.
@@ -30,12 +30,15 @@ export type ReportCode =
   | 'STOP_BUILDER_SCHEMA_INVALID'
   | 'STOP_BUILDER_SHAPE_INVALID'
   | 'STOP_BUILDER_CLI_ERROR'
+  | 'STOP_BUILDER_TIMEOUT'
   | 'STOP_HEAD_MOVED'
   | 'STOP_INTERRUPTED'
   | 'STOP_REVIEWER_FORCED_PATCH'
   | 'STOP_REVIEWER_ASK_QUESTION'
+  | 'STOP_ORCHESTRATOR_ASK_QUESTION'
   | 'STOP_REDISPATCH_IDENTICAL_TASK'
   | 'STOP_VERIFY_FLAKY_OR_TIMEOUT'
+  | 'STOP_ORCHESTRATOR_TIMEOUT'
   | 'STOP_MERGE_DIRTY_WORKTREE'
   | 'STOP_BRANCH_MISMATCH'
   | 'STOP_EVIDENCE_INCOMPLETE'
@@ -47,7 +50,12 @@ export type ReportCode =
   | 'BLOCKED_ORCHESTRATOR_OUTPUT_INVALID'
   | 'BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED'
   | 'BLOCKED_MISSING_CONFIG'
-  | 'BLOCKED_TRANSPORT_STALLED';
+  | 'BLOCKED_TRANSPORT_STALLED'
+  | 'BLOCKED_ROLLBACK_FAILED'
+  | 'BLOCKED_ROLLBACK_DIRTY'
+  | 'BLOCKED_BUILDER_COMMAND_NOT_FOUND'
+  | 'BLOCKED_BUILDER_MODE_NOT_ALLOWED'
+  | 'BLOCKED_BRANCH_FAILED';
 
 /**
  * Blast radius information about changes made during the tick.

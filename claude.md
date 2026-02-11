@@ -1,6 +1,6 @@
-# Claude Code — PILOT v3
+# Claude Code — RELAIS v3
 
-**Auto-start:** Read `/pilot/STATE.json` immediately and act on current phase.
+**Auto-start:** Read `/relais/STATE.json` immediately and act on current phase.
 
 ---
 
@@ -9,7 +9,7 @@
 | Mode | Can Write | Cannot Write |
 |------|-----------|--------------|
 | **Orchestrator mode** | `STATE.json`, `TASK.json`, `ROADMAP.json`, `REVIEW.json`, `DESIGN-CONTRACT.json` | Code files |
-| **Builder mode** | Code (in scope) + `REPORT.json` | Other `/pilot/*` files |
+| **Builder mode** | Code (in scope) + `REPORT.json` | Other `/relais/*` files |
 
 **Violations count toward 3-attempt limit.**
 

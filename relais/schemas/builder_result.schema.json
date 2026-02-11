@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://relais.local/schemas/builder_result.schema.json",
-  "title": "Relais Builder Result",
+  "$id": "https://envoi.local/schemas/builder_result.schema.json",
+  "title": "Envoi Builder Result",
   "type": "object",
   "additionalProperties": false,
   "required": ["summary", "files_intended", "commands_ran", "notes"],

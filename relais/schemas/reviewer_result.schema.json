@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://relais.local/schemas/reviewer_result.schema.json",
-  "title": "Relais Reviewer Result",
+  "$id": "https://envoi.local/schemas/reviewer_result.schema.json",
+  "title": "Envoi Reviewer Result",
   "type": "object",
   "additionalProperties": false,
   "required": ["decision", "reason_short"],

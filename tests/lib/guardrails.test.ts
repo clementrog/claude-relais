@@ -11,7 +11,7 @@ import {
 import { canonicalizeTask } from '@/lib/fingerprint';
 import type { Task } from '@/types/task.js';
 import type { TickState } from '@/types/state.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import { TickPhase } from '@/types/state.js';
 import { createMockConfig, createMockTask, createMockTickState } from '../helpers/mocks.js';
 import * as git from '@/lib/git.js';
@@ -131,7 +131,7 @@ describe('guardrails', () => {
   });
 
   describe('U003: shouldEscalate', () => {
-    let config: RelaisConfig;
+    let config: EnvoiConfig;
     let state: TickState;
 
     beforeEach(() => {

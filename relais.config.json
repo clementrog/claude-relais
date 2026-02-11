@@ -5,6 +5,7 @@
   "runner": {
     "require_git": true,
     "max_tick_seconds": 900,
+    "default_loop_mode": "milestone",
     "lockfile": "relais/lock.json",
     "runner_owned_globs": [
       "relais/STATE.json",
@@ -13,6 +14,7 @@
       "relais/REPORT.md",
       "relais/BLOCKED.json",
       "relais/FACTS.md",
+      "relais/PRD.md",
       "relais/history/**",
       "relais/lock.json",
       "relais/schemas/**",
@@ -25,6 +27,62 @@
     "render_report_md": {
       "enabled": true,
       "max_chars": 6000
+    },
+    "autonomy": {
+      "profile": "fast",
+      "command_trust": [],
+      "allow_prefixes": [
+        "git status",
+        "git log",
+        "git diff",
+        "git show",
+        "git rev-parse",
+        "git branch --show-current",
+        "ls",
+        "cat",
+        "rg",
+        "find",
+        "wc",
+        "head",
+        "tail",
+        "pwd",
+        "date"
+      ],
+      "deny_prefixes": [
+        "rm",
+        "sudo rm",
+        "git reset --hard",
+        "git checkout --",
+        "git clean -fd",
+        "git clean -fdx",
+        "mkfs",
+        "dd"
+      ],
+      "allow_network_prefixes": [
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "gh"
+      ],
+      "allow_workspace_write_prefixes": [
+        "pnpm test",
+        "pnpm build",
+        "pnpm typecheck",
+        "npm test",
+        "npm run build",
+        "git add",
+        "git commit",
+        "git switch",
+        "git checkout -b"
+      ],
+      "require_explicit_for_destructive": true,
+      "audit_log": {
+        "enabled": true,
+        "path": "relais/history/autonomy.log"
+      },
+      "fs_policy": "workspace_write",
+      "network_policy": "deny"
     }
   },
   "claude_code_cli": {
@@ -33,15 +91,16 @@
     "no_session_persistence": true
   },
   "models": {
+    "orchestrator_provider": "claude_code",
     "orchestrator_model": "opus",
     "orchestrator_fallback_model": "sonnet",
     "builder_model": "sonnet",
     "builder_fallback_model": "haiku"
   },
   "orchestrator": {
-    "max_turns": 1,
+    "max_turns": 3,
     "permission_mode": "plan",
-    "allowed_tools": "",
+    "allowed_tools": "Read,Glob,Grep",
     "system_prompt_file": "relais/prompts/orchestrator.system.txt",
     "user_prompt_file": "relais/prompts/orchestrator.user.txt",
     "task_schema_file": "relais/schemas/task.schema.json",
@@ -49,7 +108,7 @@
     "max_budget_usd": 0.4
   },
   "builder": {
-    "default_mode": "claude_code",
+    "default_mode": "cursor",
     "allow_patch_mode": true,
     "claude_code": {
       "max_turns": 8,
@@ -63,6 +122,21 @@
     },
     "patch": {
       "max_patch_attempts_per_milestone": 10
+    },
+    "cursor": {
+      "driver_kind": "cursor_agent",
+      "command": "cursor",
+      "args": [
+        "agent",
+        "--print",
+        "--output-format",
+        "text",
+        "--workspace",
+        ".",
+        "--force"
+      ],
+      "timeout_seconds": 300,
+      "output_file": "BUILDER_RESULT.json"
     }
   },
   "scope": {
@@ -106,24 +180,36 @@
       {
         "id": "lint",
         "cmd": "pnpm",
-        "args": ["-w", "lint"]
+        "args": [
+          "lint"
+        ]
       },
       {
         "id": "typecheck",
         "cmd": "pnpm",
-        "args": ["-w", "typecheck"]
+        "args": [
+          "typecheck"
+        ]
       },
       {
         "id": "test",
         "cmd": "pnpm",
-        "args": ["-w", "test"]
+        "args": [
+          "test"
+        ]
       },
       {
         "id": "test_filter",
         "cmd": "pnpm",
-        "args": ["-w", "test", "--filter", "{{pkg}}"],
+        "args": [
+          "test",
+          "--filter",
+          "{{pkg}}"
+        ],
         "params": {
-          "pkg": { "kind": "string_token" }
+          "pkg": {
+            "kind": "string_token"
+          }
         }
       }
     ]
@@ -134,15 +220,23 @@
       "max_orchestrator_calls": 260,
       "max_builder_calls": 200,
       "max_verify_runs": 600,
-      "max_estimated_cost_usd": 80.0
+      "max_estimated_cost_usd": 80
     },
     "warn_at_fraction": 0.8
   },
   "history": {
     "enabled": true,
-    "dir": "relais/history",
+    "dir": "history",
     "max_mb": 500,
     "include_diff_patch": true,
     "include_verify_log": true
+  },
+  "git": {
+    "branching": {
+      "mode": "off",
+      "name_template": "relais/{{task_id}}",
+      "base_ref": "HEAD",
+      "n_tasks": 5
+    }
   }
 }

@@ -260,7 +260,7 @@ function isLockfile(path: string, lockfiles: string[]): boolean {
  *   { modified: ['src/utils.ts'], added: ['src/new.ts'], deleted: [], renamed: [], untracked: ['src/new.ts'], all: ['src/utils.ts', 'src/new.ts'] },
  *   { allowed_globs: ['src/**'], forbidden_globs: ['*.key'], allow_new_files: false, allow_lockfile_changes: true },
  *   { lockfiles: ['package-lock.json'], default_allowed_globs: [], default_forbidden_globs: [], default_allow_new_files: true, default_allow_lockfile_changes: false },
- *   ['pilot/**']
+ *   ['relais/**']
  * );
  * if (!result.ok) {
  *   console.error(`Violation: ${result.stopCode}`, result.violatingFiles);

@@ -15,7 +15,7 @@ import type { BlockedCode } from '../types/preflight.js';
  */
 const REMEDIATION_MESSAGES: Record<string, string> = {
   BLOCKED_MISSING_CONFIG:
-    'Create or fix relais.config.json in the project root. Ensure the file is readable and contains valid JSON configuration.',
+    'Create or fix envoi.config.json in the project root. Ensure the file is readable and contains valid JSON configuration.',
   BLOCKED_DIRTY_WORKTREE:
     'Commit or stash all uncommitted changes and remove untracked files. The worktree must be clean before running a tick.',
   BLOCKED_LOCK_HELD:
@@ -27,9 +27,11 @@ const REMEDIATION_MESSAGES: Record<string, string> = {
   BLOCKED_HISTORY_CAP_CLEANUP_REQUIRED:
     'History directory exceeds the configured size limit. Manually clean up old history artifacts to free space.',
   BLOCKED_ORCHESTRATOR_OUTPUT_INVALID:
-    'The orchestrator returned invalid JSON after retry attempts. Check orchestrator logs and configuration.',
+    'The orchestrator returned invalid output. Inspect envoi/BLOCKED.json diagnostics and envoi/history/<run_id>/orchestrator/ for raw CLI output.',
   BLOCKED_TRANSPORT_STALLED:
     'Transport stall detected (connection stalled, timeout, or CLI hang). Check network connectivity, Claude API status, and retry. If the issue persists, check the request ID in the error for debugging.',
+  BLOCKED_BUILDER_MODE_NOT_ALLOWED:
+    'This runtime enforces cursor agent as the only builder. Reconfigure builder mode to cursor and retry.',
 };
 
 /**
@@ -84,7 +86,7 @@ export function buildBlockedData(
  *   'BLOCKED_DIRTY_WORKTREE',
  *   'Git worktree has uncommitted changes'
  * );
- * await writeBlocked(data, '/relais/BLOCKED.json');
+ * await writeBlocked(data, '/envoi/BLOCKED.json');
  * ```
  */
 export async function writeBlocked(data: BlockedData, path: string): Promise<void> {
@@ -101,7 +103,7 @@ export async function writeBlocked(data: BlockedData, path: string): Promise<voi
  *
  * @example
  * ```typescript
- * await deleteBlocked('/relais/BLOCKED.json');
+ * await deleteBlocked('/envoi/BLOCKED.json');
  * ```
  */
 export async function deleteBlocked(path: string): Promise<void> {
@@ -138,11 +140,24 @@ export function buildOrchestratorBlockedData(
   reason: string,
   diagnostics: OrchestratorDiagnostics
 ): BlockedData {
+  const looksLikeMaxTurns =
+    reason.includes('error_max_turns') ||
+    (diagnostics.stdout_excerpt?.includes('"subtype": "error_max_turns"') ?? false) ||
+    (diagnostics.json_excerpt?.includes('"subtype": "error_max_turns"') ?? false);
+
+  const remediationBase = REMEDIATION_MESSAGES['BLOCKED_ORCHESTRATOR_OUTPUT_INVALID'];
+  const remediation = looksLikeMaxTurns
+    ? `${remediationBase}\n\n` +
+      `Detected 'error_max_turns'. Reduce scope and keep the next task smaller (single-file/single-goal), ` +
+      `or increase orchestrator.max_turns modestly in envoi.config.json (for example +1 or +2). ` +
+      `Ensure the orchestrator output is ONLY valid task JSON (no extra text).`
+    : remediationBase;
+
   return {
     blocked_at: new Date().toISOString(),
     code: 'BLOCKED_ORCHESTRATOR_OUTPUT_INVALID',
     reason,
-    remediation: REMEDIATION_MESSAGES['BLOCKED_ORCHESTRATOR_OUTPUT_INVALID'],
+    remediation,
     diagnostics,
   };
 }

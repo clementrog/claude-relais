@@ -10,7 +10,7 @@
 
 import micromatch from 'micromatch';
 import type { TaskScope } from '../types/task.js';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 
 /**
  * Violation type identifiers.
@@ -98,7 +98,7 @@ function isLockfile(path: string, lockfiles: string[]): boolean {
  * @param touchedPaths - All file paths that were touched (modified or created)
  * @param untrackedPaths - Subset of touchedPaths that are new/untracked files
  * @param taskScope - Scope configuration from the task
- * @param config - Full Relais configuration (for lockfiles list)
+ * @param config - Full Envoi configuration (for lockfiles list)
  * @returns ScopeCheckResult with violations and status
  *
  * @example
@@ -123,7 +123,7 @@ export function checkScopeViolations(
   touchedPaths: string[],
   untrackedPaths: string[],
   taskScope: TaskScope,
-  config: RelaisConfig
+  config: EnvoiConfig
 ): ScopeCheckResult {
   const violations: ScopeViolation[] = [];
   const untrackedSet = new Set(untrackedPaths);

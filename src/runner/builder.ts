@@ -4,21 +4,30 @@
  * Invokes Claude Code with bypassPermissions mode and restricted tools to execute tasks.
  */
 
-import { lstat, readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
+import { lstat, readFile, writeFile, mkdir, unlink, access } from 'node:fs/promises';
 import { join, resolve, relative } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { constants } from 'node:fs';
 
 const execFileAsync = promisify(execFile);
 import { invokeClaudeCode } from '../lib/claude.js';
 import { matchesGlob } from '../lib/scope.js';
 import { loadSchema, validateWithSchema } from '../lib/schema.js';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { TickState } from '../types/state.js';
 import type { Task } from '../types/task.js';
 import type { BuilderResult, BuilderResultCode } from '../types/builder.js';
 import { isInterruptedError } from '../types/claude.js';
+import type { ClaudeTokenUsage } from '../types/claude.js';
 import { parseBuilderResultRaw, type BuilderParseErrorKind } from './builder_parse.js';
+import { resolveInWorkspace } from '../lib/paths.js';
+import { resolveBuilderPermissionMode } from '../lib/autonomy.js';
+import { evaluateCommandPolicy, formatPolicyForPrompt } from '../lib/command_policy.js';
+
+function isDebugEnabled(): boolean {
+  return process.env.ENVOI_DEBUG === '1';
+}
 
 /**
  * Result of builder invocation.
@@ -42,21 +51,23 @@ export interface BuilderInvocationResult {
   turnsUsed: number | null;
   /** Parse error kind for granular STOP code mapping */
   parseErrorKind?: BuilderParseErrorKind | 'cli_error';
+  /** Optional token usage telemetry from CLI output */
+  tokenUsage?: ClaudeTokenUsage | null;
 }
 
 /**
  * Builds the builder user prompt by loading the template and interpolating placeholders.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param task - Task to execute
  * @returns The interpolated user prompt
  */
 export async function buildBuilderPrompt(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   task: Task
 ): Promise<string> {
   const workspaceDir = config.workspace_dir;
-  const userPromptPath = join(workspaceDir, config.builder.claude_code.user_prompt_file);
+  const userPromptPath = resolveInWorkspace(workspaceDir, config.builder.claude_code.user_prompt_file);
 
   // Load user prompt template
   let template: string;
@@ -70,18 +81,23 @@ export async function buildBuilderPrompt(
 
   // Interpolate placeholders
   const replacements: Record<string, string> = {
-    '{{TASK_JSON}}': JSON.stringify(task, null, 2),
+    '{{TASK_JSON}}': JSON.stringify(task),
     '{{ALLOWED_GLOBS}}': task.scope.allowed_globs.join(', '),
     '{{FORBIDDEN_GLOBS}}': task.scope.forbidden_globs.join(', '),
     '{{ALLOW_NEW_FILES}}': task.scope.allow_new_files ? 'true' : 'false',
     '{{ALLOW_LOCKFILE_CHANGES}}': task.scope.allow_lockfile_changes ? 'true' : 'false',
     '{{MAX_FILES_TOUCHED}}': task.diff_limits.max_files_touched.toString(),
     '{{MAX_LINES_CHANGED}}': task.diff_limits.max_lines_changed.toString(),
+    '{{AUTONOMY_POLICY}}': formatPolicyForPrompt(config),
   };
 
   let prompt = template;
   for (const [placeholder, value] of Object.entries(replacements)) {
     prompt = prompt.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+  }
+
+  if (!template.includes('{{AUTONOMY_POLICY}}')) {
+    prompt += `\n\nAutonomy policy:\n${replacements['{{AUTONOMY_POLICY}}']}`;
   }
 
   return prompt;
@@ -228,7 +244,7 @@ async function applyPatch(
  * @see docs/NEW-PLAN.md PR4
  */
 async function handlePatchMode(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   task: Task
 ): Promise<BuilderInvocationResult> {
   const patch = task.builder?.patch ?? '';
@@ -335,16 +351,82 @@ async function handlePatchMode(
 }
 
 /**
+ * Checks if a command exists and is executable by searching PATH.
+ * Does not use shell - manually searches PATH environment variable.
+ *
+ * @param command - Command name to search for
+ * @returns Path to executable if found, null otherwise
+ */
+async function findCommandInPath(command: string): Promise<string | null> {
+  // If command contains a path separator, treat it as an absolute or relative path
+  if (command.includes('/') || (process.platform === 'win32' && command.includes('\\'))) {
+    try {
+      await access(command, constants.F_OK | constants.X_OK);
+      return command;
+    } catch {
+      return null;
+    }
+  }
+
+  // Search PATH
+  const pathEnv = process.env.PATH || '';
+  const pathDirs = pathEnv.split(process.platform === 'win32' ? ';' : ':');
+
+  for (const dir of pathDirs) {
+    if (!dir) continue;
+    const fullPath = join(dir, command);
+    try {
+      await access(fullPath, constants.F_OK | constants.X_OK);
+      return fullPath;
+    } catch {
+      // Continue searching
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Validates that a path is a safe relative path under workspace_dir.
+ * Rejects absolute paths, paths with '..', and paths that resolve outside workspace.
+ *
+ * @param path - Path to validate
+ * @param workspaceDir - Workspace directory
+ * @returns Validation result with reason if invalid
+ */
+function validateOutputFilePath(path: string, workspaceDir: string): { valid: boolean; reason?: string } {
+  if (path.includes('\0')) {
+    return { valid: false, reason: 'Path contains null byte' };
+  }
+  if (path.startsWith('/') || (process.platform === 'win32' && /^[A-Za-z]:/.test(path))) {
+    return { valid: false, reason: 'Absolute path not allowed' };
+  }
+  if (path.includes('..')) {
+    return { valid: false, reason: 'Parent directory traversal (..) not allowed' };
+  }
+  const resolved = resolve(workspaceDir, path);
+  const rel = relative(workspaceDir, resolved);
+  if (rel.startsWith('..') || rel.startsWith('/')) {
+    return { valid: false, reason: 'Path resolves outside workspace directory' };
+  }
+  return { valid: true };
+}
+
+/**
  * Handles cursor builder mode.
  *
  * Delegates build to an external process (e.g., Cursor IDE).
  * Writes TASK.json to workspace, spawns the external driver,
  * waits for completion, then reads and validates the result file.
  *
+ * Preflight checks:
+ * - Validates cursor.output_file is a safe relative path
+ * - Verifies cursor.command exists and is executable
+ *
  * @see docs/NEW-PLAN.md PR5
  */
 async function handleCursorMode(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   task: Task
 ): Promise<BuilderInvocationResult> {
   const startTime = Date.now();
@@ -363,8 +445,69 @@ async function handleCursorMode(
     };
   }
 
+  // Preflight: Validate output_file path safety
+  const outputFileValidation = validateOutputFilePath(cursor.output_file, config.workspace_dir);
+  if (!outputFileValidation.valid) {
+    return {
+      success: false,
+      result: null,
+      rawResponse: `Invalid output_file path '${cursor.output_file}': ${outputFileValidation.reason}. ` +
+        `Output file must be a safe relative path under workspace directory (no absolute paths, no '..').`,
+      durationMs: Date.now() - startTime,
+      builderOutputValid: false,
+      validationErrors: ['STOP_BUILDER_CLI_ERROR'],
+      turnsRequested: task.builder!.max_turns,
+      turnsUsed: null,
+      parseErrorKind: 'cli_error',
+    };
+  }
+
+  // Preflight: Verify command exists and is executable
+  const policyDecision = evaluateCommandPolicy(config, cursor.command, cursor.args);
+  if (policyDecision.decision === 'deny') {
+    return {
+      success: false,
+      result: null,
+      rawResponse: `Command policy denied cursor driver invocation: ${policyDecision.reason}`,
+      durationMs: Date.now() - startTime,
+      builderOutputValid: false,
+      validationErrors: ['STOP_BUILDER_CLI_ERROR'],
+      turnsRequested: task.builder!.max_turns,
+      turnsUsed: null,
+      parseErrorKind: 'cli_error',
+    };
+  }
+  const commandPath = await findCommandInPath(cursor.command);
+  if (!commandPath) {
+    return {
+      success: false,
+      result: null,
+      rawResponse: `Command '${cursor.command}' not found or not executable. ` +
+        `Please install the driver or update config.builder.cursor.command in envoi.config.json.`,
+      durationMs: Date.now() - startTime,
+      builderOutputValid: false,
+      validationErrors: ['BLOCKED_BUILDER_COMMAND_NOT_FOUND'],
+      turnsRequested: task.builder!.max_turns,
+      turnsUsed: null,
+    };
+  }
+
   const taskJsonPath = join(config.workspace_dir, 'TASK.json');
-  const outputPath = join(config.workspace_dir, cursor.output_file);
+  const outputPath = resolveInWorkspace(config.workspace_dir, cursor.output_file);
+  const schemaPath = resolveInWorkspace(
+    config.workspace_dir,
+    config.builder.claude_code.builder_result_schema_file
+  );
+  const driverKind = cursor.driver_kind ?? 'external';
+  const builderContractEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ENVOI_BUILDER_PROTOCOL: 'v2_machine',
+    ENVOI_DRIVER_KIND: driverKind,
+    ENVOI_WORKSPACE_DIR: config.workspace_dir,
+    ENVOI_TASK_PATH: taskJsonPath,
+    ENVOI_OUTPUT_PATH: outputPath,
+    ENVOI_SCHEMA_PATH: schemaPath,
+  };
 
   // Write TASK.json for external driver
   try {
@@ -376,17 +519,36 @@ async function handleCursorMode(
       rawResponse: `Failed to write TASK.json: ${error instanceof Error ? error.message : String(error)}`,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: ['Failed to write TASK.json'],
+      validationErrors: ['STOP_BUILDER_CLI_ERROR'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'cli_error',
     };
   }
 
   // Spawn external driver
   try {
-    await execFileAsync(cursor.command, cursor.args, {
-      cwd: config.workspace_dir,
+    const args = [...cursor.args];
+    if (cursor.driver_kind === 'cursor_agent') {
+      const agentPrompt = [
+        'ENVOI_BUILDER_PROTOCOL=v2_machine',
+        `TASK_PATH=${taskJsonPath}`,
+        `OUTPUT_PATH=${outputPath}`,
+        `SCHEMA_PATH=${schemaPath}`,
+        'OUTPUT_KEYS=summary,files_intended,commands_ran,notes',
+        'SINGLE_PASS=1',
+        'NO_QUESTIONS=1',
+        'Write exactly one JSON object to OUTPUT_PATH, then exit.',
+      ].join('\n');
+      console.log('[BUILD] Builder protocol: v2_machine');
+      args.push(agentPrompt);
+    }
+
+    await execFileAsync(commandPath, args, {
+      // Run from repo root (the CLI chdirToRepoRoot() ensures this in real usage).
+      cwd: process.cwd(),
       timeout: cursor.timeout_seconds * 1000,
+      env: builderContractEnv,
     });
   } catch (error) {
     const err = error as { killed?: boolean; signal?: string; message?: string };
@@ -401,6 +563,7 @@ async function handleCursorMode(
         validationErrors: ['STOP_BUILDER_TIMEOUT'],
         turnsRequested: task.builder!.max_turns,
         turnsUsed: null,
+        parseErrorKind: 'cli_error',
       };
     }
     // Other spawn errors
@@ -410,9 +573,10 @@ async function handleCursorMode(
       rawResponse: err.message ?? String(error),
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: ['External driver failed'],
+      validationErrors: ['STOP_BUILDER_CLI_ERROR'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'cli_error',
     };
   }
 
@@ -427,9 +591,10 @@ async function handleCursorMode(
       rawResponse: `Failed to read output file: ${error instanceof Error ? error.message : String(error)}`,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: ['Output file not found or unreadable'],
+      validationErrors: ['STOP_BUILDER_CLI_ERROR'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'cli_error',
     };
   }
 
@@ -444,14 +609,14 @@ async function handleCursorMode(
       rawResponse: rawOutput,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: [`Invalid JSON in output file: ${error instanceof Error ? error.message : String(error)}`],
+      validationErrors: ['STOP_BUILDER_JSON_PARSE'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'json_parse',
     };
   }
 
   // Validate against builder_result schema
-  const schemaPath = join(config.workspace_dir, 'relais/schemas/builder_result.schema.json');
   let schema: object;
   try {
     schema = await loadSchema(schemaPath);
@@ -482,9 +647,10 @@ async function handleCursorMode(
       rawResponse: rawOutput,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: ['Schema load failed and output shape invalid'],
+      validationErrors: ['STOP_BUILDER_SHAPE_INVALID'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'shape',
     };
   }
 
@@ -496,9 +662,10 @@ async function handleCursorMode(
       rawResponse: rawOutput,
       durationMs: Date.now() - startTime,
       builderOutputValid: false,
-      validationErrors: validation.errors,
+      validationErrors: ['STOP_BUILDER_SCHEMA_INVALID'],
       turnsRequested: task.builder!.max_turns,
       turnsUsed: null,
+      parseErrorKind: 'schema',
     };
   }
 
@@ -568,7 +735,7 @@ export async function runBuilder(
   }
 
   // Load system prompt
-  const systemPromptPath = join(workspaceDir, config.builder.claude_code.system_prompt_file);
+  const systemPromptPath = resolveInWorkspace(workspaceDir, config.builder.claude_code.system_prompt_file);
   let systemPrompt: string;
   try {
     systemPrompt = await readFile(systemPromptPath, 'utf-8');
@@ -587,7 +754,7 @@ export async function runBuilder(
 
   // Load builder result schema (cache after first load)
   if (builderResultSchemaCache === null) {
-    const schemaPath = join(workspaceDir, config.builder.claude_code.builder_result_schema_file);
+    const schemaPath = resolveInWorkspace(workspaceDir, config.builder.claude_code.builder_result_schema_file);
     try {
       builderResultSchemaCache = await loadSchema(schemaPath);
     } catch (error) {
@@ -623,7 +790,7 @@ export async function runBuilder(
     const response = await invokeClaudeCode(config.claude_code_cli, {
       prompt: userPrompt,
       maxTurns: clampedTurns,
-      permissionMode: config.builder.claude_code.permission_mode as 'bypassPermissions',
+      permissionMode: resolveBuilderPermissionMode(config),
       model,
       allowedTools,
       systemPrompt,
@@ -658,11 +825,12 @@ export async function runBuilder(
         turnsRequested: requestedTurns,
         turnsUsed,
         parseErrorKind: 'cli_error',
+        tokenUsage: response.tokenUsage ?? null,
       };
     }
 
     // Parse and validate builder output using pure parser
-    if (process.env.RELAIS_DEBUG === '1') {
+    if (isDebugEnabled()) {
       console.log(`[BUILDER_DEBUG] Raw response (first 500 chars): ${response.result.substring(0, 500)}`);
     }
 
@@ -682,6 +850,7 @@ export async function runBuilder(
         validationErrors: [],
         turnsRequested: requestedTurns,
         turnsUsed,
+        tokenUsage: response.tokenUsage ?? null,
       };
     }
 
@@ -700,6 +869,7 @@ export async function runBuilder(
         turnsRequested: requestedTurns,
         turnsUsed,
         parseErrorKind: parseResult.kind,
+        tokenUsage: response.tokenUsage ?? null,
       };
     }
 
@@ -714,6 +884,7 @@ export async function runBuilder(
       turnsRequested: requestedTurns,
       turnsUsed,
       parseErrorKind: parseResult.kind,
+      tokenUsage: response.tokenUsage ?? null,
     };
   } catch (error) {
     // Re-throw InterruptedError to propagate to tick level
@@ -721,8 +892,8 @@ export async function runBuilder(
       throw error;
     }
 
-    // Debug logging gated by RELAIS_DEBUG
-    if (process.env.RELAIS_DEBUG === '1') {
+    // Debug logging gated by ENVOI_DEBUG
+    if (isDebugEnabled()) {
       console.log(`[BUILDER_DEBUG] Exception: ${error instanceof Error ? error.message : String(error)}`);
     }
 

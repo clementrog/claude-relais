@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { shouldEscalate } from '@/lib/guardrails.js';
 import { createMockConfig, createMockTickState } from '../helpers/mocks.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { TickState } from '@/types/state.js';
 
 describe('F015: escalation_gate', () => {

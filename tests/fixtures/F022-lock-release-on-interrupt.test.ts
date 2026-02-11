@@ -14,7 +14,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runTick } from '@/runner/tick.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import { InterruptedError } from '@/types/claude.js';
 
 // Track lock operations
@@ -139,7 +139,7 @@ vi.mock('@/lib/verify-safety.js', () => ({
   validateAllParams: vi.fn().mockReturnValue({ ok: true }),
 }));
 
-function createMockConfig(workspaceDir: string): RelaisConfig {
+function createMockConfig(workspaceDir: string): EnvoiConfig {
   return {
     version: '1.0',
     product_name: 'test-lock-release',
@@ -228,7 +228,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
       include_diff_patch: false,
       include_verify_log: false,
     },
-  } as RelaisConfig;
+  } as EnvoiConfig;
 }
 
 describe('F022: Lock release on interrupt', () => {

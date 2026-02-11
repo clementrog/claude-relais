@@ -16,7 +16,7 @@
 import type { TransportStallError, TransportStallStage } from '../types/preflight.js';
 import type { RollbackResultNew } from './rollback.js';
 import type { DiffLimits } from '../types/task.js';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { TickState } from '../types/state.js';
 import { rollbackToCommit, verifyCleanWorktree } from './rollback.js';
 import { isWorktreeClean, getHeadCommit } from './git.js';
@@ -237,7 +237,7 @@ export function formatRetryDecision(decision: RetryDecision): string {
 }
 
 /**
- * Applies degraded settings to a RelaisConfig.
+ * Applies degraded settings to a EnvoiConfig.
  *
  * Used during retry attempt 2 to run with more conservative settings.
  * Creates a new config object without mutating the original.
@@ -248,14 +248,14 @@ export function formatRetryDecision(decision: RetryDecision): string {
  * - diff_limits.default_max_lines_changed: reduced to degraded value
  * - builder.default_mode: set to 'patch' if allow_patch_mode is true and prefer_patch_mode is set
  *
- * @param config - Original RelaisConfig
+ * @param config - Original EnvoiConfig
  * @param degraded - Degraded settings to apply
  * @returns New config with degraded settings applied
  */
 export function applyDegradedConfig(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   degraded: DegradedSettings
-): RelaisConfig {
+): EnvoiConfig {
   return {
     ...config,
     builder: {
@@ -281,10 +281,10 @@ export function applyDegradedConfig(
 /**
  * Extracts relevant settings from config for computing degraded settings.
  *
- * @param config - RelaisConfig to extract from
+ * @param config - EnvoiConfig to extract from
  * @returns Object with max_turns and diff_limits for degradation computation
  */
-export function extractDegradationInputs(config: RelaisConfig): {
+export function extractDegradationInputs(config: EnvoiConfig): {
   max_turns: number;
   diff_limits: DiffLimits;
 } {
@@ -308,9 +308,9 @@ export function extractDegradationInputs(config: RelaisConfig): {
  * @returns Degraded config if appropriate, original config otherwise
  */
 export function getDegradedConfigIfNeeded(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   retryCount: number
-): RelaisConfig {
+): EnvoiConfig {
   const action = getRetryAction(retryCount);
 
   if (action !== 'retry_degraded') {

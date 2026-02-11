@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
 import { createTransportStallError } from '@/lib/transport.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Mock all dependencies
 vi.mock('@/lib/lock.js', () => ({
@@ -99,7 +99,7 @@ const mockReleaseLock = vi.mocked(releaseLock);
 const mockAtomicWriteJson = vi.mocked(atomicWriteJson);
 const mockHandleTransportStall = vi.mocked(handleTransportStall);
 
-const createMockConfig = (): RelaisConfig => ({
+const createMockConfig = (): EnvoiConfig => ({
   v: 2,
   workspace_dir: '/tmp/test-workspace',
   runner: {
@@ -159,7 +159,7 @@ const createMockConfig = (): RelaisConfig => ({
     max_consecutive_failures: 3,
   },
   history: { enabled: true, retention_count: 50, dir: 'relais/history' },
-} as RelaisConfig);
+} as EnvoiConfig);
 
 describe('runTick stall handling', () => {
   beforeEach(() => {

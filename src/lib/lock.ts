@@ -1,5 +1,5 @@
 /**
- * Lock mechanism for preventing concurrent relais runs.
+ * Lock mechanism for preventing concurrent envoi runs.
  *
  * Implements crash-safe lock acquisition with boot_id tracking to enable
  * safe reclaim of stale locks after crashes or reboots.
@@ -22,6 +22,19 @@ export class LockHeldError extends Error {
   ) {
     super(message);
     this.name = 'LockHeldError';
+  }
+}
+
+/**
+ * Error thrown when a lock file is corrupt or malformed.
+ */
+export class LockCorruptError extends Error {
+  constructor(
+    message: string,
+    public readonly lockPath: string
+  ) {
+    super(message);
+    this.name = 'LockCorruptError';
   }
 }
 
@@ -129,6 +142,51 @@ export function isLockStale(lock: LockInfo): boolean {
 }
 
 /**
+ * Validates that a parsed value is a valid LockInfo object.
+ *
+ * @param lockPath - Path to the lock file (for error messages)
+ * @param value - The parsed JSON value to validate
+ * @throws {LockCorruptError} If the value is not a valid LockInfo
+ */
+function validateLockShape(lockPath: string, value: unknown): asserts value is LockInfo {
+  const remediation = `Delete the lock file at ${lockPath} and retry.`;
+
+  // Must be an object (not null, not array)
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new LockCorruptError(
+      `Lock file has invalid structure (expected object, got ${value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value}). ${remediation}`,
+      lockPath
+    );
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // pid must be integer > 0
+  if (typeof obj.pid !== 'number' || !Number.isInteger(obj.pid) || obj.pid <= 0) {
+    throw new LockCorruptError(
+      `Lock file has invalid pid (expected integer > 0, got ${JSON.stringify(obj.pid)}). ${remediation}`,
+      lockPath
+    );
+  }
+
+  // started_at must be non-empty string
+  if (typeof obj.started_at !== 'string' || obj.started_at === '') {
+    throw new LockCorruptError(
+      `Lock file has invalid started_at (expected non-empty string, got ${JSON.stringify(obj.started_at)}). ${remediation}`,
+      lockPath
+    );
+  }
+
+  // boot_id must be non-empty string
+  if (typeof obj.boot_id !== 'string' || obj.boot_id === '') {
+    throw new LockCorruptError(
+      `Lock file has invalid boot_id (expected non-empty string, got ${JSON.stringify(obj.boot_id)}). ${remediation}`,
+      lockPath
+    );
+  }
+}
+
+/**
  * Acquires a lock by creating a lock file atomically.
  *
  * If a lock already exists:
@@ -138,23 +196,42 @@ export function isLockStale(lock: LockInfo): boolean {
  * @param lockPath - Path to the lock file
  * @returns The lock information that was written
  * @throws {LockHeldError} If the lock is held by another active process
+ * @throws {LockCorruptError} If the lock file is corrupt or malformed
  * @throws {AtomicFsError} If the lock file cannot be written
  */
 export async function acquireLock(lockPath: string): Promise<LockInfo> {
   // Check if lock file exists
   let existingLock: LockInfo | null = null;
   try {
-    existingLock = await atomicReadJson<LockInfo>(lockPath);
+    const rawValue = await atomicReadJson<unknown>(lockPath);
+    validateLockShape(lockPath, rawValue);
+    existingLock = rawValue;
   } catch (error) {
-    // File doesn't exist or is invalid - we can proceed
+    // Re-throw LockCorruptError as-is
+    if (error instanceof LockCorruptError) {
+      throw error;
+    }
+
     if (error instanceof AtomicFsError) {
       const cause = error.cause;
-      if (cause && 'code' in cause && (cause as NodeJS.ErrnoException).code !== 'ENOENT') {
-        // Real error (not file-not-found)
+      // File doesn't exist - no lock, proceed
+      if (cause && 'code' in cause && (cause as NodeJS.ErrnoException).code === 'ENOENT') {
+        // No lock file exists
+      } else if (cause instanceof SyntaxError) {
+        // JSON parse error - corrupt lock file
+        const remediation = `Delete the lock file at ${lockPath} and retry.`;
+        throw new LockCorruptError(
+          `Lock file contains invalid JSON. ${remediation}`,
+          lockPath
+        );
+      } else {
+        // Real error (I/O issue, permission denied, etc.)
         throw error;
       }
+    } else {
+      // Unknown error, rethrow
+      throw error;
     }
-    // ENOENT or invalid JSON - treat as no lock
   }
 
   if (existingLock) {

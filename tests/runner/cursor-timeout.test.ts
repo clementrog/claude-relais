@@ -17,7 +17,7 @@ import { runBuilder } from '@/runner/builder.js';
 import { TickPhase } from '@/types/state.js';
 import type { TickState } from '@/types/state.js';
 import type { Task } from '@/types/task.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Simulate Node timeout: execFile with timeout kills process and rejects with killed + signal
 vi.mock('node:child_process', () => ({
@@ -39,7 +39,7 @@ vi.mock('node:child_process', () => ({
 describe('Acceptance: Cursor mode timeout returns STOP_BUILDER_TIMEOUT', () => {
   let tmpDir: string;
   let state: TickState;
-  let config: RelaisConfig;
+  let config: EnvoiConfig;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'relais-cursor-timeout-'));
@@ -75,7 +75,7 @@ describe('Acceptance: Cursor mode timeout returns STOP_BUILDER_TIMEOUT', () => {
           command: 'sleep',
           args: ['10'],
           timeout_seconds: 1,
-          output_file: 'pilot/REPORT.json',
+          output_file: 'relais/REPORT.json',
         },
       },
       reviewer: {
@@ -121,11 +121,11 @@ describe('Acceptance: Cursor mode timeout returns STOP_BUILDER_TIMEOUT', () => {
         require_git: true,
         max_tick_seconds: 300,
         lockfile: '.relais.lock',
-        runner_owned_globs: ['pilot/*'],
+        runner_owned_globs: ['relais/*'],
         crash_cleanup: { delete_tmp_glob: '.tmp/**', validate_runner_json_files: true },
         render_report_md: { enabled: false, max_chars: 50000 },
       },
-    } as RelaisConfig;
+    } as EnvoiConfig;
 
     state = {
       phase: TickPhase.BUILD,

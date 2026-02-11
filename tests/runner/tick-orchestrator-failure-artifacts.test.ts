@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
 import { createMockConfig } from '../helpers/mocks.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { OrchestratorFailureMeta } from '@/lib/history.js';
 
 // Track what gets written to history
@@ -38,14 +38,13 @@ vi.mock('@/runner/orchestrator.js', () => ({
   runOrchestrator: vi.fn(),
 }));
 
-vi.mock('@/lib/fs.js', () => ({
-  atomicWriteJson: vi.fn(),
-  AtomicFsError: class extends Error {
-    constructor(message: string, public readonly path: string) {
-      super(message);
-    }
-  },
-}));
+vi.mock('@/lib/fs.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/fs.js')>();
+  return {
+    ...actual,
+    atomicWriteJson: vi.fn(),
+  };
+});
 
 vi.mock('@/lib/report.js', () => ({
   renderReportMarkdown: vi.fn(),
@@ -68,7 +67,7 @@ vi.mock('@/lib/history.js', () => ({
 }));
 
 describe('tick: orchestrator failure history artifacts', () => {
-  let config: RelaisConfig;
+  let config: EnvoiConfig;
 
   beforeEach(async () => {
     vi.clearAllMocks();

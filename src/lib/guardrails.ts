@@ -12,7 +12,7 @@
 import type { ReportCode } from '../types/report.js';
 import type { Task } from '../types/task.js';
 import type { TickState } from '../types/state.js';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import { getCurrentBranch, isWorktreeClean } from './git.js';
 import { computeFingerprint } from './fingerprint.js';
 
@@ -227,7 +227,7 @@ export interface EscalationDecision {
  * - Otherwise → mode is 'human'
  *
  * @param state - Current tick state containing failure_streak and stop_history
- * @param config - Relais configuration containing escalation settings
+ * @param config - Envoi configuration containing escalation settings
  * @param currentTick - Current tick number (for stop window calculation)
  * @returns EscalationDecision with mode and reason
  *
@@ -241,7 +241,7 @@ export interface EscalationDecision {
  */
 export function shouldEscalate(
   state: TickState,
-  config: RelaisConfig,
+  config: EnvoiConfig,
   currentTick: number
 ): EscalationDecision {
   const failureStreak = state.failure_streak ?? 0;

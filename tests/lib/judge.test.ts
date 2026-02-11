@@ -299,7 +299,7 @@ describe('checkScopeViolations', () => {
     default_allow_lockfile_changes: false,
   };
 
-  const defaultRunnerOwnedGlobs = ['pilot/**', 'relais.config.json'];
+  const defaultRunnerOwnedGlobs = ['relais/**', 'relais.config.json'];
 
   it('should return ok=true when no violations', () => {
     const touched = {
@@ -321,19 +321,19 @@ describe('checkScopeViolations', () => {
 
   it('should detect STOP_RUNNER_OWNED_MUTATION (highest priority)', () => {
     const touched = {
-      modified: ['src/utils.ts', 'pilot/STATE.json'],
+      modified: ['src/utils.ts', 'relais/STATE.json'],
       added: [],
       deleted: [],
       renamed: [],
       untracked: [],
-      all: ['src/utils.ts', 'pilot/STATE.json'],
+      all: ['src/utils.ts', 'relais/STATE.json'],
     };
 
     const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
 
     expect(result.ok).toBe(false);
     expect(result.stopCode).toBe('STOP_RUNNER_OWNED_MUTATION');
-    expect(result.violatingFiles).toEqual(['pilot/STATE.json']);
+    expect(result.violatingFiles).toEqual(['relais/STATE.json']);
     expect(result.reason).toContain('runner-owned globs');
   });
 
@@ -469,19 +469,19 @@ describe('checkScopeViolations', () => {
 
   it('should check priority order - runner-owned takes precedence over forbidden', () => {
     const touched = {
-      modified: ['pilot/STATE.json', 'secret.key'],
+      modified: ['relais/STATE.json', 'secret.key'],
       added: [],
       deleted: [],
       renamed: [],
       untracked: [],
-      all: ['pilot/STATE.json', 'secret.key'],
+      all: ['relais/STATE.json', 'secret.key'],
     };
 
     const result = checkScopeViolations(touched, defaultTaskScope, defaultScopeConfig, defaultRunnerOwnedGlobs);
 
     expect(result.ok).toBe(false);
     expect(result.stopCode).toBe('STOP_RUNNER_OWNED_MUTATION');
-    expect(result.violatingFiles).toEqual(['pilot/STATE.json']);
+    expect(result.violatingFiles).toEqual(['relais/STATE.json']);
   });
 
   it('should return multiple violating files for same violation type', () => {

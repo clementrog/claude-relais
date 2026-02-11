@@ -194,8 +194,8 @@ describe('S002: Version bump discipline', () => {
         const schema = await loadSchema(join(schemasDir, schemaFile));
         const id = (schema as { $id: string }).$id;
         
-        // All schemas should use the relais.local domain
-        expect(id).toMatch(/^https:\/\/relais\.local\/schemas\//);
+        // All schemas should use the envoi.local domain
+        expect(id).toMatch(/^https:\/\/envoi\.local\/schemas\//);
         // $id should match filename
         expect(id).toContain(schemaFile);
       }

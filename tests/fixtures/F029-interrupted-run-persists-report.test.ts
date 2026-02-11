@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -56,7 +56,7 @@ vi.mock('@/lib/workspace_state.js', () => ({
 import { runPreflight } from '@/lib/preflight.js';
 const mockRunPreflight = vi.mocked(runPreflight);
 
-function createMockConfig(workspaceDir: string): RelaisConfig {
+function createMockConfig(workspaceDir: string): EnvoiConfig {
   return {
     version: '1',
     workspace_dir: workspaceDir,
@@ -136,7 +136,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
       max_consecutive_failures: 3,
     },
     history: { enabled: false, retention_count: 50, dir: 'relais/history', max_mb: 100, include_diff_patch: false, include_verify_log: false },
-  } as RelaisConfig;
+  } as EnvoiConfig;
 }
 
 describe('F029: interrupted_run_persists_report', () => {

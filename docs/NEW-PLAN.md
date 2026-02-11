@@ -95,7 +95,7 @@ max_verify_runs
 
 Soft stop is PR2 (loop). PR1 is hard stop (preflight).
 
-PR2 — relais loop with modes + SIGINT graceful exit
+PR2 — envoi loop with modes + SIGINT graceful exit
 What becomes true
 
 Autonomous and milestone modes exist as actual behavior.
@@ -174,9 +174,9 @@ src/index.ts (near the existing run command)
 
 Add command:
 
-relais loop --mode milestone|autonomous [--max-ticks N]
+envoi loop --mode milestone|autonomous [--max-ticks N]
 
-This keeps relais run = per-task (single tick).
+This keeps envoi run = per-task (single tick).
 
 PR3 — Persist milestone_id early (minimal crash tolerance)
 What becomes true
@@ -276,7 +276,7 @@ builder: {
     command: string;
     args: string[];
     timeout_seconds: number;
-    output_file: string; // e.g. "relais/BUILDER_RESULT.json"
+    output_file: string; // e.g. "envoi/BUILDER_RESULT.json"
   };
 }
 
@@ -289,7 +289,7 @@ enforce argv-only; no shell string
 
 Task schema changes
 
-relais/schemas/task.schema.json
+envoi/schemas/task.schema.json
 
 builder.mode enum add "cursor"
 
@@ -342,7 +342,7 @@ Loop has a clean “done” signal.
 
 Schema changes
 
-relais/schemas/task.schema.json
+envoi/schemas/task.schema.json
 Add:
 
 "control": {
@@ -398,11 +398,11 @@ You can run these in dogfood immediately (and they map to your safety posture):
 
 Loop stops on budget cap
 
-Set budgets to tiny numbers, run relais loop, confirm preflight blocks on next tick.
+Set budgets to tiny numbers, run envoi loop, confirm preflight blocks on next tick.
 
 SIGINT is graceful
 
-Start relais loop
+Start envoi loop
 
 ctrl+c during orchestrator or verify phase
 
@@ -430,7 +430,7 @@ What I want from Gemini (feedback prompt)
 
 Paste this verbatim to Gemini to confirm edge cases and keep him honest:
 
-I’m implementing autonomous + milestone + patch + “Cursor builder” on top of relais with minimal diffs and unchanged safety posture.
+I’m implementing autonomous + milestone + patch + “Cursor builder” on top of envoi with minimal diffs and unchanged safety posture.
 
 Important: I am NOT assuming Cursor has a headless CLI. “cursor mode” means an external driver command (argv-only) that reads TASK.json and writes BUILDER_RESULT.json.
 

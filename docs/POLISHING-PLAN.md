@@ -1,9 +1,9 @@
-# Relais Polishing Plan — Dogfooding Ready
+# Envoi Polishing Plan — Dogfooding Ready
 
 **Status:** Draft
 **Owner:** Clement
-**Reference:** [PRD v1](../prd/Relais%20—%20PRD%20v1.md)
-**Goal:** Make Relais resilient to Cursor stalls + wire JUDGE + ship dogfood test battery
+**Reference:** [PRD v1](../prd/Envoi%20—%20PRD%20v1.md)
+**Goal:** Make Envoi resilient to Cursor stalls + wire JUDGE + ship dogfood test battery
 
 ---
 
@@ -11,8 +11,8 @@
 
 After proving the core loop works (orchestrator → builder → basic verification), these are the gaps blocking comfortable dogfooding:
 
-1. **Report files dirty the repo** — every tick modifies `relais/REPORT.json`
-2. **No `relais init`** — manual setup required
+1. **Report files dirty the repo** — every tick modifies `envoi/REPORT.json`
+2. **No `envoi init`** — manual setup required
 3. **JUDGE phase incomplete** — scope/diff/verify guardrails not enforced from git reality
 4. **Fixture coverage gaps** — need red/green tests for all STOP codes
 5. **Transport stalls** — Cursor "Connection stalled", CLI hang, timeout not handled
@@ -21,7 +21,7 @@ After proving the core loop works (orchestrator → builder → basic verificati
 
 ## Global Acceptance Criteria
 
-Relais must:
+Envoi must:
 
 1. **Never report SUCCESS** if it violated scope/diff/verify/head-moved rules
 2. **Never leave the repo dirty** after a failed/blocked tick (rollback if configured/needed)
@@ -32,7 +32,7 @@ Relais must:
 
 ## M11: Report Output Hygiene ✅
 
-**Problem:** `relais/REPORT.json` dirties the worktree every tick, triggering `BLOCKED_DIRTY_WORKTREE` on next run.
+**Problem:** `envoi/REPORT.json` dirties the worktree every tick, triggering `BLOCKED_DIRTY_WORKTREE` on next run.
 
 **Reference:** PRD §3 STOP vs BLOCKED, §13 Atomicity
 
@@ -40,28 +40,28 @@ Relais must:
 
 | ID | Task | Acceptance |
 |----|------|------------|
-| WP-100 | Auto-add `.gitignore` entries during init | `relais/REPORT.json`, `relais/REPORT.md`, `relais/history/**`, `relais/*.tmp`, `relais/lock.json` are gitignored |
+| WP-100 | Auto-add `.gitignore` entries during init | `envoi/REPORT.json`, `envoi/REPORT.md`, `envoi/history/**`, `envoi/*.tmp`, `envoi/lock.json` are gitignored |
 | WP-101 | Exclude runner-owned files from dirty check | Preflight `BLOCKED_DIRTY_WORKTREE` ignores paths matching `runner_owned_globs` |
 
 ---
 
-## M12: `relais init` Command ✅
+## M12: `envoi init` Command ✅
 
 **Problem:** No scaffolding command exists. Users must manually create workspace.
 
-**Reference:** PRD §15 CLI (V1): `relais init`
+**Reference:** PRD §15 CLI (V1): `envoi init`
 
 ### Tasks
 
 | ID | Task | Acceptance |
 |----|------|------------|
-| WP-110 | Implement `relais init` basic scaffolding | Creates `relais.config.json` if missing |
-| WP-111 | Create workspace directory structure | Creates `relais/` with subdirs: `prompts/`, `schemas/`, `history/` |
+| WP-110 | Implement `envoi init` basic scaffolding | Creates `envoi.config.json` if missing |
+| WP-111 | Create workspace directory structure | Creates `envoi/` with subdirs: `prompts/`, `schemas/`, `history/` |
 | WP-112 | Copy default prompts | Writes `orchestrator.system.txt`, `orchestrator.user.txt`, `builder.system.txt`, `builder.user.txt` |
 | WP-113 | Copy default schemas | Writes `task.schema.json`, `builder_result.schema.json`, `report.schema.json` |
 | WP-114 | Initialize STATE.json | Creates empty/initial `STATE.json` with milestone counter at 0 |
-| WP-115 | Add .gitignore entries | Appends relais ignores to `.gitignore` (or creates if missing) |
-| WP-116 | Print next steps | CLI outputs: "Created relais workspace. Next: edit relais.config.json, then run `relais run`" |
+| WP-115 | Add .gitignore entries | Appends envoi ignores to `.gitignore` (or creates if missing) |
+| WP-116 | Print next steps | CLI outputs: "Created envoi workspace. Next: edit envoi.config.json, then run `envoi run`" |
 
 ---
 
@@ -153,7 +153,7 @@ Relais must:
 
 ## M18: Transport Stall Handling (Cursor/CLI hang, Connection stalled)
 
-**Problem:** If builder/orchestrator invocation stalls or throws "connection stalled", Relais must handle it deterministically.
+**Problem:** If builder/orchestrator invocation stalls or throws "connection stalled", Envoi must handle it deterministically.
 
 **Goal:** Detect and classify transport stalls, stop the tick with `BLOCKED_TRANSPORT_STALLED`, record evidence, release lock, ensure repo is clean.
 
@@ -174,7 +174,7 @@ When stall detected:
 | WP-212 | Implement error normalization for stalls | Detect substrings: "Connection stalled", "Request ID:", "streamFromAgentBackend" |
 | WP-213 | Return structured stall failure | Return `{ kind: 'transport_stalled', stage, request_id, raw_error }` |
 | WP-214 | Handle stall in tick runner | If stall during ORCHESTRATE or BUILD: rollback if dirty, write report, exit blocked |
-| WP-215 | Add heartbeat file for watchdog (optional) | `.git/relais/heartbeat.json` updated at phase boundaries |
+| WP-215 | Add heartbeat file for watchdog (optional) | `.git/envoi/heartbeat.json` updated at phase boundaries |
 
 ### Detection Patterns
 
@@ -266,7 +266,7 @@ M19: wire JUDGE into tick runner (scope/diff/verify/head-moved/rollback)
 
 **Reference:** PRD Appendix A4, Appendix B
 
-**Goal:** Create deterministic fixtures that prove Relais stops correctly.
+**Goal:** Create deterministic fixtures that prove Envoi stops correctly.
 
 ### Fixtures (Minimum Set)
 
@@ -374,14 +374,14 @@ M21: bounded retry + degrade policy for transport stalls
 
 | ID | Task | Acceptance |
 |----|------|------------|
-| WP-190 | Implement `relais run` command | Execute one tick, print result, exit with appropriate code |
+| WP-190 | Implement `envoi run` command | Execute one tick, print result, exit with appropriate code |
 | WP-191 | Add `--dry-run` flag to run | Show what would happen without executing |
 | WP-192 | Add `--continue` flag to run | Resume from BLOCKED state if possible |
-| WP-193 | Implement `relais status` command | Show current STATE.json: phase, task, milestone, blockers |
+| WP-193 | Implement `envoi status` command | Show current STATE.json: phase, task, milestone, blockers |
 | WP-194 | Add `--preflight` flag to status | Run preflight checks and report results |
 | WP-195 | Add `--json` flag to status | Output machine-readable JSON |
-| WP-196 | Implement `relais doctor` command | Check prerequisites: git, claude CLI, node version |
-| WP-197 | Doctor checks config validity | Validate relais.config.json against schema |
+| WP-196 | Implement `envoi doctor` command | Check prerequisites: git, claude CLI, node version |
+| WP-197 | Doctor checks config validity | Validate envoi.config.json against schema |
 | WP-198 | Doctor checks workspace integrity | Verify prompts/schemas exist, STATE.json valid |
 
 ---
@@ -446,7 +446,7 @@ Complete test battery for JUDGE phase + transport stalls:
 | F060 | verify_tainted | Param with `;` | `STOP_VERIFY_TAINTED` |
 | F070 | verify_fail_fast | Fast verify exits 1 | `STOP_VERIFY_FAILED_FAST` |
 | F080 | question_side_effects | question task + file edit | `STOP_QUESTION_SIDE_EFFECTS` |
-| F090 | runner_owned_mutation | Edit `relais/history/...` | `STOP_RUNNER_OWNED_MUTATION` |
+| F090 | runner_owned_mutation | Edit `envoi/history/...` | `STOP_RUNNER_OWNED_MUTATION` |
 | F100 | transport_stall | Builder/orchestrator stall | `BLOCKED_TRANSPORT_STALLED` |
 
 ---

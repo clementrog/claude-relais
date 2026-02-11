@@ -49,7 +49,7 @@ exports[`S002: Version bump discipline > Breaking change detection > should dete
 
 exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for builder_result.schema.json 1`] = `
 {
-  "$id": "https://relais.local/schemas/builder_result.schema.json",
+  "$id": "https://envoi.local/schemas/builder_result.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "required": [
     "summary",
@@ -57,14 +57,14 @@ exports[`S002: Version bump discipline > Schema snapshot comparison > should mat
     "commands_ran",
     "notes",
   ],
-  "title": "Relais Builder Result",
+  "title": "Envoi Builder Result",
   "type": "object",
 }
 `;
 
 exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for report.schema.json 1`] = `
 {
-  "$id": "https://relais.local/schemas/report.schema.json",
+  "$id": "https://envoi.local/schemas/report.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "required": [
     "run_id",
@@ -82,27 +82,27 @@ exports[`S002: Version bump discipline > Schema snapshot comparison > should mat
     "verification",
     "budgets",
   ],
-  "title": "Relais Report",
+  "title": "Envoi Report",
   "type": "object",
 }
 `;
 
 exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for reviewer_result.schema.json 1`] = `
 {
-  "$id": "https://relais.local/schemas/reviewer_result.schema.json",
+  "$id": "https://envoi.local/schemas/reviewer_result.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "required": [
     "decision",
     "reason_short",
   ],
-  "title": "Relais Reviewer Result",
+  "title": "Envoi Reviewer Result",
   "type": "object",
 }
 `;
 
 exports[`S002: Version bump discipline > Schema snapshot comparison > should match snapshot for task.schema.json 1`] = `
 {
-  "$id": "https://relais.local/schemas/task.schema.json",
+  "$id": "https://envoi.local/schemas/task.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "required": [
     "task_id",
@@ -113,7 +113,7 @@ exports[`S002: Version bump discipline > Schema snapshot comparison > should mat
     "diff_limits",
     "verification",
   ],
-  "title": "Relais Task",
+  "title": "Envoi Task",
   "type": "object",
 }
 `;

@@ -1,7 +1,7 @@
 /**
- * TypeScript interfaces for relais.config.json configuration.
+ * TypeScript interfaces for envoi.config.json configuration.
  *
- * These types define the complete structure of the Relais configuration file.
+ * These types define the complete structure of the Envoi configuration file.
  */
 
 /**
@@ -25,6 +25,37 @@ export interface RenderReportMdConfig {
 }
 
 /**
+ * Runtime autonomy profile for balancing speed vs approvals.
+ */
+export interface RunnerAutonomyConfig {
+  /** Profile selector controlling default permission behavior */
+  profile: 'strict' | 'balanced' | 'fast';
+  /** Optional trusted command prefixes for operator documentation */
+  command_trust?: string[];
+  /** Enforced trusted command prefixes (argv prefix match, e.g. "git log") */
+  allow_prefixes?: string[];
+  /** Enforced denied command prefixes (argv prefix match, e.g. "git reset --hard") */
+  deny_prefixes?: string[];
+  /** Trusted network command prefixes (e.g. "pnpm", "gh") */
+  allow_network_prefixes?: string[];
+  /** Trusted workspace-write command prefixes (e.g. "pnpm test", "git commit") */
+  allow_workspace_write_prefixes?: string[];
+  /** Whether destructive commands require explicit user intent */
+  require_explicit_for_destructive?: boolean;
+  /** Optional autonomy audit log settings */
+  audit_log?: {
+    /** Whether to persist autonomy decisions */
+    enabled: boolean;
+    /** Relative path to the autonomy decision log file */
+    path: string;
+  };
+  /** Optional file-system policy label for operator documentation */
+  fs_policy?: 'workspace_write' | 'read_only';
+  /** Optional network policy label for operator documentation */
+  network_policy?: 'deny' | 'allow';
+}
+
+/**
  * Runner configuration for the orchestration loop.
  */
 export interface RunnerConfig {
@@ -32,6 +63,8 @@ export interface RunnerConfig {
   require_git: boolean;
   /** Maximum seconds per tick before timeout */
   max_tick_seconds: number;
+  /** Default loop mode used when `envoi loop` is invoked without --mode (optional) */
+  default_loop_mode?: 'task' | 'milestone' | 'autonomous';
   /** Path to the lockfile for preventing concurrent runs */
   lockfile: string;
   /** Glob patterns for files owned by the runner (not modifiable by builder) */
@@ -40,6 +73,8 @@ export interface RunnerConfig {
   crash_cleanup: CrashCleanupConfig;
   /** Report rendering settings */
   render_report_md: RenderReportMdConfig;
+  /** Optional autonomy profile and policy hints */
+  autonomy?: RunnerAutonomyConfig;
 }
 
 /**
@@ -58,6 +93,8 @@ export interface ClaudeCodeCliConfig {
  * Model configuration for different agent roles.
  */
 export interface ModelsConfig {
+  /** Orchestrator runtime provider */
+  orchestrator_provider?: 'claude_code' | 'chatgpt';
   /** Primary model for orchestrator */
   orchestrator_model: string;
   /** Fallback model for orchestrator */
@@ -88,6 +125,8 @@ export interface OrchestratorConfig {
   max_parse_retries_per_tick: number;
   /** Maximum budget in USD per orchestrator call */
   max_budget_usd: number;
+  /** Timeout in seconds for orchestrator invocation (optional, falls back to runner.max_tick_seconds) */
+  timeout_seconds?: number;
 }
 
 /**
@@ -125,13 +164,19 @@ export interface PatchBuilderConfig {
  * Works with any headless script: Cursor wrapper, llm CLI, etc.
  */
 export interface CursorBuilderConfig {
+  /**
+   * Driver kind:
+   * - 'external' (default): an arbitrary driver that reads TASK.json and writes output_file
+   * - 'cursor_agent': invoke `cursor agent` and pass a generated prompt to execute TASK.json
+   */
+  driver_kind?: 'external' | 'cursor_agent';
   /** Command to invoke the external driver */
   command: string;
   /** Arguments to pass (argv-only, no shell string) */
   args: string[];
   /** Timeout in seconds before killing the process */
   timeout_seconds: number;
-  /** Output file path where driver writes result (e.g., 'relais/BUILDER_RESULT.json') */
+  /** Output file path where driver writes result (e.g., 'envoi/BUILDER_RESULT.json') */
   output_file: string;
 }
 
@@ -327,16 +372,30 @@ export interface ReviewerConfig {
 }
 
 /**
- * Main Relais configuration interface.
- *
- * This matches the structure of relais.config.json.
+ * Git branching configuration for runner-owned branch management.
  */
-export interface RelaisConfig {
+export interface GitBranchingConfig {
+  /** Branching mode: 'off' (disabled), 'per_tick' (create branch per tick), 'per_n_tasks' (create branch per N tasks), 'per_milestone' (create branch per milestone) */
+  mode: 'off' | 'per_tick' | 'per_n_tasks' | 'per_milestone';
+  /** Number of tasks per branch (only used when mode='per_n_tasks') */
+  n_tasks?: number;
+  /** Base ref (commit/branch) to create new branches from. Default: 'HEAD' */
+  base_ref?: string;
+  /** Branch name template. Supports placeholders: {{task_id}}, {{milestone_id}}, {{run_id}}, {{tick_count}}, {{YYYYMMDD}}, {{seq}} (or {{batch_index}}). Also supports {task_id}, {milestone_id} style. Default: 'envoi/{{task_id}}' */
+  name_template?: string;
+}
+
+/**
+ * Main Envoi configuration interface.
+ *
+ * This matches the structure of envoi.config.json.
+ */
+export interface EnvoiConfig {
   /** Configuration version */
   version: string;
   /** Product name */
   product_name: string;
-  /** Directory for relais workspace files */
+  /** Directory for envoi workspace files */
   workspace_dir: string;
   /** Runner settings */
   runner: RunnerConfig;
@@ -360,4 +419,8 @@ export interface RelaisConfig {
   history: HistoryConfig;
   /** Reviewer agent settings (optional, feature can be disabled) */
   reviewer?: ReviewerConfig;
+  /** Git branching settings (optional, defaults to mode='off') */
+  git?: {
+    branching?: GitBranchingConfig;
+  };
 }

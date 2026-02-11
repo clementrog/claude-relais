@@ -33,6 +33,74 @@ export interface BudgetCounts {
 export type BudgetDeltas = Partial<BudgetCounts>;
 
 /**
+ * Delivery timing preference for user ideas.
+ */
+export type IdeaTestabilityNeed = 'soon' | 'later' | 'unknown';
+
+/**
+ * Lifecycle status of a user-submitted idea.
+ */
+export type IdeaStatus = 'new' | 'triaged' | 'scheduled' | 'deferred' | 'done';
+
+/**
+ * A user idea captured between execution boundaries.
+ */
+export interface IdeaInboxEntry {
+  /** Stable ID for reference in planning decisions */
+  id: string;
+  /** Raw user idea text */
+  text: string;
+  /** ISO timestamp when the idea was submitted */
+  submitted_at: string;
+  /** Where the idea was captured from */
+  source: 'interactive' | 'cli' | 'api';
+  /** Current planning status */
+  status: IdeaStatus;
+  /** Optional target date or milestone hint */
+  target_by?: string | null;
+  /** Optional testability urgency */
+  testability_need?: IdeaTestabilityNeed;
+  /** Last orchestrator task that triaged this idea */
+  triaged_by_task_id?: string;
+  /** ISO timestamp when triaged */
+  triaged_at?: string;
+}
+
+/**
+ * Rolling PM-style digest generated from orchestrator planning decisions.
+ */
+export interface PlanningDigest {
+  /** Last update timestamp */
+  updated_at: string;
+  /** Human-readable summary of the latest planning decision */
+  summary: string;
+  /** Last task that updated the digest */
+  last_task_id?: string;
+  /** Last milestone suggested by orchestrator */
+  suggested_milestone?: string;
+}
+
+/**
+ * Open product-level question asked by the orchestrator.
+ */
+export interface ProductQuestion {
+  /** Stable question ID */
+  id: string;
+  /** Prompt shown to the user */
+  prompt: string;
+  /** Optional choices */
+  choices?: string[];
+  /** Created timestamp */
+  created_at: string;
+  /** Resolution status */
+  resolved: boolean;
+  /** Optional resolution timestamp */
+  resolved_at?: string;
+  /** Optional free-text resolution */
+  resolution?: string;
+}
+
+/**
  * Workspace state persisted to STATE.json.
  *
  * This state survives restarts and enables:
@@ -59,4 +127,13 @@ export interface WorkspaceState {
 
   /** Last verdict (PASS/FAIL/STOP/etc) for resume logic */
   last_verdict: string | null;
+
+  /** Optional inbox of user-submitted ideas */
+  idea_inbox?: IdeaInboxEntry[];
+
+  /** Optional rolling digest of planning decisions */
+  planning_digest?: PlanningDigest | null;
+
+  /** Optional list of open product questions from orchestrator */
+  open_product_questions?: ProductQuestion[];
 }

@@ -12,7 +12,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPreflight } from '@/lib/preflight.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { WorkspaceState } from '@/types/workspace_state.js';
 
 describe('Acceptance: Budget cap enforcement', () => {
@@ -36,7 +36,7 @@ describe('Acceptance: Budget cap enforcement', () => {
     max_orchestrator_calls?: number;
     max_builder_calls?: number;
     max_verify_runs?: number;
-  }): RelaisConfig {
+  }): EnvoiConfig {
     return {
       workspace_dir: tmpDir,
       claude_code_cli: { command: 'claude', args: [] },

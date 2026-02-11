@@ -5,15 +5,15 @@
  * for testing core runner behaviors.
  */
 
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { TickState } from '@/types/state.js';
 import type { Task, TaskKind } from '@/types/task.js';
 import { TickPhase } from '@/types/state.js';
 
 /**
- * Creates a minimal valid RelaisConfig for testing.
+ * Creates a minimal valid EnvoiConfig for testing.
  */
-export function createMockConfig(overrides?: Partial<RelaisConfig>): RelaisConfig {
+export function createMockConfig(overrides?: Partial<EnvoiConfig>): EnvoiConfig {
   return {
     version: '1.0',
     product_name: 'relais',
@@ -163,7 +163,7 @@ export function createMockTask(
  * Creates a minimal TickState for testing.
  */
 export function createMockTickState(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   task: Task | null = null,
   overrides?: Partial<TickState>
 ): TickState {

@@ -5,7 +5,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import { TickPhase } from '../types/state.js';
 import type {
   TickState,
@@ -27,11 +27,11 @@ export function generateRunId(): string {
 /**
  * Creates initial tick state.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param baseCommit - Git HEAD commit SHA at start
  * @returns Initial tick state
  */
-export function createInitialState(config: RelaisConfig, baseCommit: string): TickState {
+export function createInitialState(config: EnvoiConfig, baseCommit: string): TickState {
   return {
     phase: TickPhase.LOCK,
     run_id: generateRunId(),

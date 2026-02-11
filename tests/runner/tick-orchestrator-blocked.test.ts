@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
 import { createMockConfig } from '../helpers/mocks.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { BlockedData } from '@/types/blocked.js';
 import type { ReportData } from '@/types/report.js';
 
@@ -40,14 +40,13 @@ vi.mock('@/runner/orchestrator.js', () => ({
   runOrchestrator: vi.fn(),
 }));
 
-vi.mock('@/lib/fs.js', () => ({
-  atomicWriteJson: vi.fn(),
-  AtomicFsError: class extends Error {
-    constructor(message: string, public readonly path: string) {
-      super(message);
-    }
-  },
-}));
+vi.mock('@/lib/fs.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/fs.js')>();
+  return {
+    ...actual,
+    atomicWriteJson: vi.fn(),
+  };
+});
 
 vi.mock('@/lib/report.js', () => ({
   renderReportMarkdown: vi.fn(),
@@ -64,7 +63,7 @@ vi.mock('@/lib/blocked.js', async (importOriginal) => {
 });
 
 describe('tick: BLOCKED_ORCHESTRATOR_OUTPUT_INVALID', () => {
-  let config: RelaisConfig;
+  let config: EnvoiConfig;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -91,7 +90,7 @@ describe('tick: BLOCKED_ORCHESTRATOR_OUTPUT_INVALID', () => {
     vi.mocked(atomicWriteJson).mockImplementation(async (path: string, data: unknown) => {
       writtenFiles.set(path, data);
     });
-    vi.mocked(renderReportMarkdown).mockReturnValue('# Relais Report\n\nMock markdown content');
+    vi.mocked(renderReportMarkdown).mockReturnValue('# Envoi Report\n\nMock markdown content');
     vi.mocked(writeReportMarkdown).mockImplementation(async (content: string, path: string) => {
       writtenFiles.set(path, content);
     });

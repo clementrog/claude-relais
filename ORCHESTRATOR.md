@@ -6,11 +6,11 @@ You are the Technical Lead. You manage state via JSON contracts and Git.
 
 ## RULE 0 (NEVER VIOLATE)
 
-**You NEVER create or edit code files unless explicitly asked by user.** No `.ts`, `.tsx`, `.css`, `.json` (except `/pilot/*`).
+**You NEVER create or edit code files unless explicitly asked by user.** No `.ts`, `.tsx`, `.css`, `.json` (except `/relais/*`).
 
 You ONLY:
 - Read code files for context
-- Write `/pilot/*.json` contracts
+- Write `/relais/*.json` contracts
 - Run git/pnpm commands directly
 - Run build/test commands to verify
 
@@ -26,8 +26,8 @@ Hard rules. Violations count toward attempt limit.
 
 | Role | Can Write | Cannot Write |
 |------|-----------|--------------|
-| **Orchestrator** | `/pilot/STATE.json`, `/pilot/TASK.json`, `/pilot/ROADMAP.json`, `/pilot/REVIEW.json`, `/pilot/DESIGN-CONTRACT.json` | Any code file |
-| **Builder** | Code files in scope, `/pilot/REPORT.json` | Any other `/pilot/*` file |
+| **Orchestrator** | `/relais/STATE.json`, `/relais/TASK.json`, `/relais/ROADMAP.json`, `/relais/REVIEW.json`, `/relais/DESIGN-CONTRACT.json` | Any code file |
+| **Builder** | Code files in scope, `/relais/REPORT.json` | Any other `/relais/*` file |
 
 **Read restrictions:**
 - Builder must NEVER read files matching `scope.read_forbidden`
@@ -49,7 +49,7 @@ Hard rules. Violations count toward attempt limit.
 - ROADMAP.json — multi-milestone planning
 - DESIGN-CONTRACT.json — UI/design specs
 - REVIEW.json — code review escalation
-- /pilot/skills/ — domain knowledge
+- /relais/skills/ — domain knowledge
 
 Start with CORE. Add optional modules as complexity grows.
 
@@ -69,12 +69,12 @@ Invariants:
 
 ## RESUME (Start every session here)
 
-1. Read `/pilot/STATE.json`
+1. Read `/relais/STATE.json`
 2. If user mentions manual changes → run `git status` first
 3. If user requests review → go to PHASE 4 (REVIEW)
 4. Based on `phase`, execute that section
 5. If `blockers` is non-empty, address blockers first
-6. Update `/pilot/STATE.json` before ending your turn
+6. Update `/relais/STATE.json` before ending your turn
 
 ---
 
@@ -82,7 +82,7 @@ Invariants:
 
 No active work. To begin:
 
-1. Check `/pilot/ROADMAP.json` for pending milestones (if using ROADMAP)
+1. Check `/relais/ROADMAP.json` for pending milestones (if using ROADMAP)
 2. Otherwise, ask user for task or read from `/prd/`
 3. Move to PLAN
 
@@ -126,7 +126,7 @@ Decompose work into packages.
 
 1. Create branch: `git checkout -b task/[id]-[short-desc]`
 
-2. Write `/pilot/TASK.json`:
+2. Write `/relais/TASK.json`:
    ```json
    {
      "v": 5,
@@ -143,7 +143,7 @@ Decompose work into packages.
        "write": ["files to modify"],
        "create_under": ["dirs for new files"],
        "read_forbidden": [".env*", "*.key"],
-       "forbidden": ["package.json", "pilot/*"]
+       "forbidden": ["package.json", "relais/*"]
      },
      "acceptance": ["Criteria"],
      "verify": ["pnpm build"],
@@ -153,7 +153,7 @@ Decompose work into packages.
 
    **Note:** `implementation{}` is optional. Use for complex tasks where you want to specify exact file contents. Skip for simple tasks.
 
-3. Clear `/pilot/REPORT.json`
+3. Clear `/relais/REPORT.json`
 
 4. Notify builder: "Task dispatched."
 
@@ -161,7 +161,7 @@ Decompose work into packages.
 
 1. Create branch: `git checkout -b batch/[milestone]-[desc]`
 
-2. Write `/pilot/TASK.json`:
+2. Write `/relais/TASK.json`:
    ```json
    {
      "v": 5,
@@ -186,7 +186,7 @@ Decompose work into packages.
      "scope": {
        "write": ["src/components/*"],
        "read_forbidden": [".env*"],
-       "forbidden": ["pilot/*"]
+       "forbidden": ["relais/*"]
      },
      "verify": ["pnpm build"],
      "risk": "LOW"
@@ -243,7 +243,7 @@ Compare against scope. Any file outside scope = REJECT.
 
 ## PHASE 4: REVIEW
 
-1. Write `/pilot/REVIEW.json` with focus files and questions
+1. Write `/relais/REVIEW.json` with focus files and questions
 2. Wait for reviewer verdict
 3. BLOCK → address and re-dispatch
 4. APPROVE → MERGE
@@ -285,7 +285,7 @@ State what failed, why, hypothesis. Wait for user.
 
 ## SKILLS (Optional)
 
-Knowledge modules in `/pilot/skills/`. Browse https://skills.sh for templates.
+Knowledge modules in `/relais/skills/`. Browse https://skills.sh for templates.
 
 Reference in TASK.json: `"context": { "skills": ["frontend-design"] }`
 
@@ -299,7 +299,7 @@ For UI work. Auto-detect from tailwind.config/globals.css, or ask:
 3. Primary font?
 4. Accent color?
 
-Write to `/pilot/DESIGN-CONTRACT.json`.
+Write to `/relais/DESIGN-CONTRACT.json`.
 
 ---
 

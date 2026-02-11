@@ -80,6 +80,20 @@ export interface TaskControl {
 }
 
 /**
+ * Orchestrator planning metadata for PM-style idea triage.
+ */
+export interface TaskPlanningDecision {
+  /** Idea IDs considered when preparing this task */
+  idea_ids_considered: string[];
+  /** Scheduling decision */
+  decision: 'schedule_now' | 'schedule_next' | 'defer';
+  /** Short rationale for the decision */
+  rationale_short: string;
+  /** Optional milestone suggestion from orchestrator */
+  suggested_milestone?: string;
+}
+
+/**
  * Task structure output by the orchestrator.
  *
  * This matches the structure defined in task.schema.json.
@@ -106,4 +120,6 @@ export interface Task {
   builder?: TaskBuilder;
   /** Control configuration for stopping the loop (mutually exclusive with builder) */
   control?: TaskControl;
+  /** Optional PM-style planning metadata */
+  planning_decision?: TaskPlanningDecision;
 }

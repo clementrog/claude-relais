@@ -175,7 +175,7 @@ not json
     "slow": ["test"]
   },
   "builder": {
-    "mode": "claude_code",
+    "mode": "cursor",
     "max_turns": 20,
     "instructions": "Implement JWT authentication"
   }

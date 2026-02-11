@@ -43,14 +43,14 @@ describe('parseGitStatusWithExclusions', () => {
   });
 
   it('should handle multiple exclusion patterns', () => {
-    const statusOutput = ' M relais/REPORT.json\n M pilot/STATE.json\n M src/file.ts\n';
+    const statusOutput = ' M relais/REPORT.json\n M relais/STATE.json\n M src/file.ts\n';
 
-    const result = parseGitStatusWithExclusions(statusOutput, ['relais/**', 'pilot/**']);
+    const result = parseGitStatusWithExclusions(statusOutput, ['relais/**', 'relais/**']);
 
     expect(result.clean).toBe(false);
     expect(result.dirtyFiles).toEqual(['src/file.ts']);
     expect(result.excludedFiles).toContain('relais/REPORT.json');
-    expect(result.excludedFiles).toContain('pilot/STATE.json');
+    expect(result.excludedFiles).toContain('relais/STATE.json');
   });
 
   it('should handle specific file patterns', () => {

@@ -8,11 +8,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { shouldEscalate } from '@/lib/guardrails.js';
 import { createMockConfig, createMockTickState } from '../helpers/mocks.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { TickState } from '@/types/state.js';
 
 describe('F020: stop_window_escalation', () => {
-  let config: RelaisConfig;
+  let config: EnvoiConfig;
 
   beforeEach(() => {
     vi.clearAllMocks();

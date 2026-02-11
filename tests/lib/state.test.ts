@@ -10,9 +10,9 @@ import {
   createInitialState,
 } from '@/lib/state.js';
 import type { TickState } from '@/types/state.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
-const mockConfig: RelaisConfig = {
+const mockConfig: EnvoiConfig = {
   v: 1,
   workspace_dir: './relais',
   prompts: {

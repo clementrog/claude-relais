@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
-  addRelaisIgnores,
-  checkRelaisIgnores,
-  RELAIS_GITIGNORE_MARKER,
-  RELAIS_GITIGNORE_ENTRIES,
+  addEnvoiIgnores,
+  checkEnvoiIgnores,
+  ENVOI_GITIGNORE_MARKER,
+  ENVOI_GITIGNORE_ENTRIES,
 } from '@/lib/gitignore';
 import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-describe('addRelaisIgnores', () => {
+describe('addEnvoiIgnores', () => {
   let testDir: string;
 
   beforeEach(async () => {
@@ -26,15 +26,15 @@ describe('addRelaisIgnores', () => {
   });
 
   it('should create .gitignore if it does not exist', async () => {
-    const result = await addRelaisIgnores(testDir);
+    const result = await addEnvoiIgnores(testDir);
 
     expect(result.created).toBe(true);
-    expect(result.added).toEqual(RELAIS_GITIGNORE_ENTRIES);
+    expect(result.added).toEqual(ENVOI_GITIGNORE_ENTRIES);
     expect(result.alreadyPresent).toEqual([]);
 
     const content = await readFile(join(testDir, '.gitignore'), 'utf-8');
-    expect(content).toContain(RELAIS_GITIGNORE_MARKER);
-    for (const entry of RELAIS_GITIGNORE_ENTRIES) {
+    expect(content).toContain(ENVOI_GITIGNORE_MARKER);
+    for (const entry of ENVOI_GITIGNORE_ENTRIES) {
       expect(content).toContain(entry);
     }
   });
@@ -43,73 +43,73 @@ describe('addRelaisIgnores', () => {
     const gitignorePath = join(testDir, '.gitignore');
     await writeFile(gitignorePath, 'node_modules/\n.env\n');
 
-    const result = await addRelaisIgnores(testDir);
+    const result = await addEnvoiIgnores(testDir);
 
     expect(result.created).toBe(false);
-    expect(result.added).toEqual(RELAIS_GITIGNORE_ENTRIES);
+    expect(result.added).toEqual(ENVOI_GITIGNORE_ENTRIES);
 
     const content = await readFile(gitignorePath, 'utf-8');
     expect(content).toContain('node_modules/');
     expect(content).toContain('.env');
-    expect(content).toContain(RELAIS_GITIGNORE_MARKER);
-    for (const entry of RELAIS_GITIGNORE_ENTRIES) {
+    expect(content).toContain(ENVOI_GITIGNORE_MARKER);
+    for (const entry of ENVOI_GITIGNORE_ENTRIES) {
       expect(content).toContain(entry);
     }
   });
 
   it('should be idempotent - not duplicate entries', async () => {
     // First call
-    await addRelaisIgnores(testDir);
+    await addEnvoiIgnores(testDir);
     const firstContent = await readFile(join(testDir, '.gitignore'), 'utf-8');
 
     // Second call
-    const result = await addRelaisIgnores(testDir);
+    const result = await addEnvoiIgnores(testDir);
 
     expect(result.added).toEqual([]);
-    expect(result.alreadyPresent).toEqual(RELAIS_GITIGNORE_ENTRIES);
+    expect(result.alreadyPresent).toEqual(ENVOI_GITIGNORE_ENTRIES);
 
     const secondContent = await readFile(join(testDir, '.gitignore'), 'utf-8');
     expect(secondContent).toBe(firstContent);
   });
 
   it('should not duplicate marker on repeated calls', async () => {
-    await addRelaisIgnores(testDir);
-    await addRelaisIgnores(testDir);
-    await addRelaisIgnores(testDir);
+    await addEnvoiIgnores(testDir);
+    await addEnvoiIgnores(testDir);
+    await addEnvoiIgnores(testDir);
 
     const content = await readFile(join(testDir, '.gitignore'), 'utf-8');
     // Escape regex special characters in marker
-    const escapedMarker = RELAIS_GITIGNORE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedMarker = ENVOI_GITIGNORE_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const markerCount = (content.match(new RegExp(escapedMarker, 'g')) || []).length;
     expect(markerCount).toBe(1);
   });
 
   it('should detect already present entries', async () => {
     const gitignorePath = join(testDir, '.gitignore');
-    await writeFile(gitignorePath, 'relais/REPORT.json\nrelais/STATE.json\n');
+    await writeFile(gitignorePath, `${ENVOI_GITIGNORE_ENTRIES[0]}\n${ENVOI_GITIGNORE_ENTRIES[2]}\n`);
 
-    const result = await addRelaisIgnores(testDir);
+    const result = await addEnvoiIgnores(testDir);
 
-    expect(result.alreadyPresent).toContain('relais/REPORT.json');
-    expect(result.alreadyPresent).toContain('relais/STATE.json');
-    expect(result.added).not.toContain('relais/REPORT.json');
-    expect(result.added).not.toContain('relais/STATE.json');
+    expect(result.alreadyPresent).toContain(ENVOI_GITIGNORE_ENTRIES[0]);
+    expect(result.alreadyPresent).toContain(ENVOI_GITIGNORE_ENTRIES[2]);
+    expect(result.added).not.toContain(ENVOI_GITIGNORE_ENTRIES[0]);
+    expect(result.added).not.toContain(ENVOI_GITIGNORE_ENTRIES[2]);
   });
 
   it('should handle .gitignore without trailing newline', async () => {
     const gitignorePath = join(testDir, '.gitignore');
     await writeFile(gitignorePath, 'node_modules/'); // No trailing newline
 
-    await addRelaisIgnores(testDir);
+    await addEnvoiIgnores(testDir);
 
     const content = await readFile(gitignorePath, 'utf-8');
     expect(content).toContain('node_modules/\n');
-    expect(content).toContain(RELAIS_GITIGNORE_MARKER);
+    expect(content).toContain(ENVOI_GITIGNORE_MARKER);
   });
 
   it('should accept custom entries', async () => {
     const customEntries = ['custom/path', 'another/path'];
-    const result = await addRelaisIgnores(testDir, customEntries);
+    const result = await addEnvoiIgnores(testDir, customEntries);
 
     expect(result.added).toEqual(customEntries);
 
@@ -119,7 +119,7 @@ describe('addRelaisIgnores', () => {
   });
 });
 
-describe('checkRelaisIgnores', () => {
+describe('checkEnvoiIgnores', () => {
   let testDir: string;
 
   beforeEach(async () => {
@@ -136,34 +136,34 @@ describe('checkRelaisIgnores', () => {
   });
 
   it('should return all entries as missing when .gitignore does not exist', async () => {
-    const result = await checkRelaisIgnores(testDir);
+    const result = await checkEnvoiIgnores(testDir);
 
     expect(result.complete).toBe(false);
-    expect(result.missing).toEqual(RELAIS_GITIGNORE_ENTRIES);
+    expect(result.missing).toEqual(ENVOI_GITIGNORE_ENTRIES);
     expect(result.present).toEqual([]);
   });
 
   it('should return complete=true when all entries present', async () => {
-    await addRelaisIgnores(testDir);
+    await addEnvoiIgnores(testDir);
 
-    const result = await checkRelaisIgnores(testDir);
+    const result = await checkEnvoiIgnores(testDir);
 
     expect(result.complete).toBe(true);
     expect(result.missing).toEqual([]);
-    expect(result.present).toEqual(RELAIS_GITIGNORE_ENTRIES);
+    expect(result.present).toEqual(ENVOI_GITIGNORE_ENTRIES);
   });
 
   it('should detect partial presence', async () => {
     const gitignorePath = join(testDir, '.gitignore');
-    await writeFile(gitignorePath, 'relais/REPORT.json\nrelais/STATE.json\n');
+    await writeFile(gitignorePath, `${ENVOI_GITIGNORE_ENTRIES[0]}\n${ENVOI_GITIGNORE_ENTRIES[2]}\n`);
 
-    const result = await checkRelaisIgnores(testDir);
+    const result = await checkEnvoiIgnores(testDir);
 
     expect(result.complete).toBe(false);
-    expect(result.present).toContain('relais/REPORT.json');
-    expect(result.present).toContain('relais/STATE.json');
-    expect(result.missing).not.toContain('relais/REPORT.json');
-    expect(result.missing).not.toContain('relais/STATE.json');
+    expect(result.present).toContain(ENVOI_GITIGNORE_ENTRIES[0]);
+    expect(result.present).toContain(ENVOI_GITIGNORE_ENTRIES[2]);
+    expect(result.missing).not.toContain(ENVOI_GITIGNORE_ENTRIES[0]);
+    expect(result.missing).not.toContain(ENVOI_GITIGNORE_ENTRIES[2]);
     expect(result.missing.length).toBeGreaterThan(0);
   });
 });

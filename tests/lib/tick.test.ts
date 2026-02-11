@@ -30,7 +30,7 @@ import {
 import { createInitialState } from '@/lib/state.js';
 import { createTransportStallError } from '@/lib/transport.js';
 import type { TransportStallError } from '@/types/preflight.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Mock git and rollback modules
 vi.mock('@/lib/git.js', () => ({
@@ -439,7 +439,7 @@ describe('MAX_RETRY_ATTEMPTS', () => {
 });
 
 // Minimal mock config for testing degraded settings
-const createMockConfig = (overrides: Partial<RelaisConfig> = {}): RelaisConfig => ({
+const createMockConfig = (overrides: Partial<EnvoiConfig> = {}): EnvoiConfig => ({
   v: 2,
   runner: {
     require_git: true,
@@ -533,7 +533,7 @@ const createMockConfig = (overrides: Partial<RelaisConfig> = {}): RelaisConfig =
     dir: 'relais/history',
   },
   ...overrides,
-} as RelaisConfig);
+} as EnvoiConfig);
 
 describe('extractDegradationInputs', () => {
   it('should extract max_turns from builder config', () => {

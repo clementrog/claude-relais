@@ -1,5 +1,5 @@
 /**
- * Utilities for managing .gitignore entries for Relais runner-owned files.
+ * Utilities for managing .gitignore entries for Envoi runner-owned files.
  *
  * Runner-owned files (STATE.json, REPORT.json, etc.) change every tick and
  * should be gitignored to prevent BLOCKED_DIRTY_WORKTREE on subsequent runs.
@@ -7,29 +7,36 @@
 
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
+import { WORKSPACE_DIR_NAME } from './branding.js';
 
 /**
- * Marker comment to identify Relais-managed section in .gitignore
+ * Marker comment to identify Envoi-managed section in .gitignore.
  */
-export const RELAIS_GITIGNORE_MARKER = '# Relais runner-owned (auto-generated)';
+export const ENVOI_GITIGNORE_MARKER = '# Envoi runner-owned (auto-generated)';
+const MIGRATION_GITIGNORE_MARKER = '# Relais runner-owned (auto-generated)';
 
 /**
- * Default entries to add to .gitignore for Relais runner-owned files
+ * Default entries to add to .gitignore for Envoi runner-owned files.
  */
-export const RELAIS_GITIGNORE_ENTRIES = [
-  'relais/REPORT.json',
-  'relais/REPORT.md',
-  'relais/STATE.json',
-  'relais/TASK.json',
-  'relais/BLOCKED.json',
-  'relais/lock.json',
-  'relais/history/',
-  'relais/*.tmp',
-];
+export function getEnvoiGitignoreEntries(workspaceDir: string): string[] {
+  const ws = workspaceDir.replace(/\/+$/, '');
+  return [
+    `${ws}/REPORT.json`,
+    `${ws}/REPORT.md`,
+    `${ws}/STATE.json`,
+    `${ws}/TASK.json`,
+    `${ws}/BLOCKED.json`,
+    `${ws}/lock.json`,
+    `${ws}/history/`,
+    `${ws}/*.tmp`,
+    `${ws}/PRD.md`,
+    `${ws}/FACTS.md`,
+    `${ws}/BUILDER_RESULT.json`,
+  ];
+}
 
-/**
- * Checks if a file exists at the given path.
- */
+export const ENVOI_GITIGNORE_ENTRIES = getEnvoiGitignoreEntries(WORKSPACE_DIR_NAME);
+
 async function fileExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -39,39 +46,21 @@ async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-/**
- * Adds Relais runner-owned entries to .gitignore.
- *
- * This function is idempotent - it won't duplicate entries if they already exist.
- * If .gitignore doesn't exist, it creates one.
- *
- * @param repoRoot - The root directory of the repository
- * @param entries - Optional custom entries to add (defaults to RELAIS_GITIGNORE_ENTRIES)
- * @returns Object with `added` (entries actually added) and `alreadyPresent` (entries that existed)
- *
- * @example
- * ```typescript
- * const result = await addRelaisIgnores('/path/to/repo');
- * console.log(`Added ${result.added.length} entries to .gitignore`);
- * ```
- */
-export async function addRelaisIgnores(
+export async function addEnvoiIgnores(
   repoRoot: string,
-  entries: string[] = RELAIS_GITIGNORE_ENTRIES
+  entries: string[] = ENVOI_GITIGNORE_ENTRIES
 ): Promise<{ added: string[]; alreadyPresent: string[]; created: boolean }> {
   const gitignorePath = join(repoRoot, '.gitignore');
 
   let existingContent = '';
   let created = false;
 
-  // Read existing .gitignore if it exists
   if (await fileExists(gitignorePath)) {
     existingContent = await readFile(gitignorePath, 'utf-8');
   } else {
     created = true;
   }
 
-  // Parse existing entries (split by newlines, trim whitespace)
   const existingLines = new Set(
     existingContent
       .split('\n')
@@ -79,10 +68,10 @@ export async function addRelaisIgnores(
       .filter((line) => line.length > 0)
   );
 
-  // Check if marker already exists
-  const hasMarker = existingContent.includes(RELAIS_GITIGNORE_MARKER);
+  const hasMarker =
+    existingContent.includes(ENVOI_GITIGNORE_MARKER) ||
+    existingContent.includes(MIGRATION_GITIGNORE_MARKER);
 
-  // Determine which entries need to be added
   const added: string[] = [];
   const alreadyPresent: string[] = [];
 
@@ -94,47 +83,34 @@ export async function addRelaisIgnores(
     }
   }
 
-  // If nothing to add, return early
   if (added.length === 0 && hasMarker) {
     return { added: [], alreadyPresent, created: false };
   }
 
-  // Build the new content
   let newContent = existingContent;
 
-  // Ensure content ends with newline before appending
   if (newContent.length > 0 && !newContent.endsWith('\n')) {
     newContent += '\n';
   }
 
-  // Add blank line separator if content exists and no marker yet
   if (newContent.length > 0 && !hasMarker) {
     newContent += '\n';
   }
 
-  // Add marker if not present
   if (!hasMarker) {
-    newContent += RELAIS_GITIGNORE_MARKER + '\n';
+    newContent += ENVOI_GITIGNORE_MARKER + '\n';
   }
 
-  // Add new entries
   for (const entry of added) {
     newContent += entry + '\n';
   }
 
-  // Write the updated .gitignore
   await writeFile(gitignorePath, newContent, 'utf-8');
 
   return { added, alreadyPresent, created };
 }
 
-/**
- * Checks if Relais gitignore entries are already present.
- *
- * @param repoRoot - The root directory of the repository
- * @returns Object with `complete` (all entries present), `missing` (entries not found)
- */
-export async function checkRelaisIgnores(
+export async function checkEnvoiIgnores(
   repoRoot: string
 ): Promise<{ complete: boolean; missing: string[]; present: string[] }> {
   const gitignorePath = join(repoRoot, '.gitignore');
@@ -142,7 +118,7 @@ export async function checkRelaisIgnores(
   if (!(await fileExists(gitignorePath))) {
     return {
       complete: false,
-      missing: [...RELAIS_GITIGNORE_ENTRIES],
+      missing: [...ENVOI_GITIGNORE_ENTRIES],
       present: [],
     };
   }
@@ -158,7 +134,7 @@ export async function checkRelaisIgnores(
   const missing: string[] = [];
   const present: string[] = [];
 
-  for (const entry of RELAIS_GITIGNORE_ENTRIES) {
+  for (const entry of ENVOI_GITIGNORE_ENTRIES) {
     if (existingLines.has(entry)) {
       present.push(entry);
     } else {

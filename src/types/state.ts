@@ -1,11 +1,11 @@
 /**
- * State machine types for the relais tick execution.
+ * State machine types for the envoi tick execution.
  *
- * A tick is one complete execution of the relais loop through all phases:
+ * A tick is one complete execution of the envoi loop through all phases:
  * LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END
  */
 
-import type { RelaisConfig } from './config.js';
+import type { EnvoiConfig } from './config.js';
 import type { Task } from './task.js';
 import type { BuilderResult } from './builder.js';
 
@@ -88,8 +88,8 @@ export interface TickState {
   started_at: string;
   /** Git HEAD commit SHA at the start of the tick */
   base_commit: string;
-  /** Relais configuration */
-  config: RelaisConfig;
+  /** Envoi configuration */
+  config: EnvoiConfig;
   /** Task from orchestrator (null until ORCHESTRATE phase completes) */
   task: Task | null;
   /** Builder result (null until BUILD phase completes) */

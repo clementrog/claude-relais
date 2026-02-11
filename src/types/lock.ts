@@ -2,7 +2,7 @@
  * Lock mechanism type definitions.
  *
  * These types support the lock acquisition/release system that prevents
- * concurrent relais runs and enables safe lock reclaim after crashes.
+ * concurrent envoi runs and enables safe lock reclaim after crashes.
  */
 
 /**

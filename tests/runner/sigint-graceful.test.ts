@@ -10,21 +10,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { isStopRequested, resetStopFlag, runLoop } from '@/runner/loop.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 import type { ReportData } from '@/types/report.js';
 import type { WorkspaceState } from '@/types/workspace_state.js';
 
 // Mock dependencies so runLoop can run and install the SIGINT handler
-vi.mock('@/lib/preflight.js', () => ({
-  runPreflight: vi.fn().mockResolvedValue({
-    ok: true,
-    blocked_code: null,
-    blocked_reason: null,
-    warnings: [],
-    base_commit: 'abc123',
-  }),
-}));
-
 vi.mock('@/lib/workspace_state.js', () => ({
   readWorkspaceState: vi.fn().mockResolvedValue({
     milestone_id: 'M1',
@@ -41,13 +31,12 @@ vi.mock('@/runner/tick.js', () => ({
   runTick: vi.fn(),
 }));
 
-import { runPreflight } from '@/lib/preflight.js';
 import { readWorkspaceState } from '@/lib/workspace_state.js';
 import { runTick } from '@/runner/tick.js';
 
 const mockRunTick = vi.mocked(runTick);
 
-function createMockConfig(workspaceDir: string): RelaisConfig {
+function createMockConfig(workspaceDir: string): EnvoiConfig {
   return {
     version: '1',
     workspace_dir: workspaceDir,
@@ -97,7 +86,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
       timeout_slow_seconds: 120,
       templates: [],
     },
-    reviewer: { enabled: false } as RelaisConfig['reviewer'],
+    reviewer: { enabled: false } as EnvoiConfig['reviewer'],
     guardrails: {
       identical_task_max_redispatches: 3,
       require_branch_match: true,
@@ -106,7 +95,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
     },
     history: { enabled: true, retention_count: 50, dir: 'relais/history' },
     budgets: { per_milestone: {} },
-  } as RelaisConfig;
+  } as EnvoiConfig;
 }
 
 const minimalReport: ReportData = {
@@ -116,26 +105,27 @@ const minimalReport: ReportData = {
   duration_ms: 0,
   base_commit: 'abc123',
   head_commit: 'abc123',
-  task: { id: 'WP-0', milestone: 'M1', goal: '', scope: {} as any },
+  task: { task_id: 'WP-0', milestone_id: 'M1', task_kind: 'execute', intent: '' },
   verdict: 'success',
   code: 'SUCCESS',
   blast_radius: { files_touched: 0, lines_added: 0, lines_deleted: 0, new_files: 0 },
-  scope: { allowed: true, violations: [] },
-  diff: { files_modified: [], files_added: [], files_deleted: [] },
-  verification: { fast: [], slow: [] },
-  budgets: {} as any,
+  scope: { ok: true, violations: [], touched_paths: [] },
+  diff: { files_changed: 0, lines_changed: 0, diff_patch_path: '' },
+  verification: { exec_mode: 'argv_no_shell', runs: [], verify_log_path: '' },
+  budgets: {
+    milestone_id: 'M1',
+    ticks: 1,
+    orchestrator_calls: 1,
+    builder_calls: 1,
+    verify_runs: 0,
+    estimated_cost_usd: 0,
+    warnings: [],
+  },
 };
 
 describe('Acceptance: SIGINT graceful shutdown', () => {
   beforeEach(() => {
     resetStopFlag();
-    vi.mocked(runPreflight).mockResolvedValue({
-      ok: true,
-      blocked_code: null,
-      blocked_reason: null,
-      warnings: [],
-      base_commit: 'abc123',
-    });
     vi.mocked(readWorkspaceState).mockResolvedValue({
       milestone_id: 'M1',
       budgets: { ticks: 0, orchestrator_calls: 0, builder_calls: 0, verify_runs: 0 },

@@ -16,12 +16,12 @@ import { runBuilder } from '@/runner/builder.js';
 import { TickPhase } from '@/types/state.js';
 import type { TickState } from '@/types/state.js';
 import type { Task } from '@/types/task.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 describe('Acceptance: Patch path traversal rejected', () => {
   let tmpDir: string;
   let state: TickState;
-  let config: RelaisConfig;
+  let config: EnvoiConfig;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), 'relais-patch-traversal-'));
@@ -90,11 +90,11 @@ describe('Acceptance: Patch path traversal rejected', () => {
         require_git: true,
         max_tick_seconds: 300,
         lockfile: '.relais.lock',
-        runner_owned_globs: ['pilot/*'],
+        runner_owned_globs: ['relais/*'],
         crash_cleanup: { delete_tmp_glob: '.tmp/**', validate_runner_json_files: true },
         render_report_md: { enabled: false, max_chars: 50000 },
       },
-    } as RelaisConfig;
+    } as EnvoiConfig;
 
     state = {
       phase: TickPhase.BUILD,

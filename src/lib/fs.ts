@@ -6,7 +6,57 @@
  */
 
 import { open, rename, unlink, readFile, readdir } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, isAbsolute } from 'node:path';
+
+/**
+ * Result of glob pattern safety check.
+ */
+export type GlobSafetyResult = { safe: true } | { safe: false; reason: string };
+
+/**
+ * Checks if a glob pattern is safe for file deletion operations.
+ *
+ * Safe patterns:
+ * - Relative paths like `envoi/*.tmp`, `envoi/**\/*.tmp`, `*.tmp`
+ *
+ * Unsafe patterns:
+ * - Empty or whitespace-only patterns
+ * - Patterns containing path traversal (`..`)
+ * - Unix absolute paths (starting with `/`)
+ * - Windows absolute paths (e.g., `C:\`)
+ * - UNC paths (`\\server\share` or `//server/share`)
+ *
+ * @param pattern - The glob pattern to check
+ * @returns Result indicating if the pattern is safe
+ */
+export function isGlobPatternSafe(pattern: string): GlobSafetyResult {
+  // Check for empty or whitespace-only patterns
+  if (!pattern || pattern.trim() === '') {
+    return { safe: false, reason: 'Empty or whitespace-only pattern' };
+  }
+
+  // Check for path traversal
+  if (pattern.includes('..')) {
+    return { safe: false, reason: 'Pattern contains path traversal (..)' };
+  }
+
+  // Check for Unix absolute paths
+  if (pattern.startsWith('/')) {
+    return { safe: false, reason: 'Pattern is an absolute Unix path' };
+  }
+
+  // Check for Windows absolute paths (e.g., C:\, D:\)
+  if (/^[A-Za-z]:[\\\/]/.test(pattern)) {
+    return { safe: false, reason: 'Pattern is an absolute Windows path' };
+  }
+
+  // Check for UNC paths (\\server\share or //server/share)
+  if (pattern.startsWith('\\\\') || pattern.startsWith('//')) {
+    return { safe: false, reason: 'Pattern is a UNC path' };
+  }
+
+  return { safe: true };
+}
 
 /**
  * Error thrown when atomic file operations fail.
@@ -126,8 +176,8 @@ export async function atomicReadJson<T>(filePath: string): Promise<T> {
  *
  * @example
  * ```typescript
- * // Clean up all .tmp files in /relais directory
- * const deleted = await cleanupTmpFiles('/relais');
+ * // Clean up all .tmp files in /envoi directory
+ * const deleted = await cleanupTmpFiles('/envoi');
  * console.log(`Cleaned up ${deleted.length} stale tmp files`);
  * ```
  */

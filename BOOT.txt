@@ -1,6 +1,6 @@
-PILOT v3 — AI Orchestration Protocol
+RELAIS v3 — AI Orchestration Protocol
 
-1. Read /pilot/STATE.json → current phase
+1. Read /relais/STATE.json → current phase
 2. Read /ORCHESTRATOR.md → full instructions
 3. Execute phase
 
@@ -17,7 +17,7 @@ OPTIONAL (add when needed):
 - ROADMAP.json — milestone planning
 - DESIGN-CONTRACT.json — UI specs
 - REVIEW.json — code review
-- /pilot/skills/ — knowledge modules
+- /relais/skills/ — knowledge modules
 
 ---
 

@@ -1,11 +1,11 @@
 /**
- * Relais type definitions.
+ * Envoi type definitions.
  *
- * This module exports all public types for the Relais project.
+ * This module exports all public types for the Envoi project.
  */
 
 export type {
-  RelaisConfig,
+  EnvoiConfig,
   RunnerConfig,
   CrashCleanupConfig,
   RenderReportMdConfig,

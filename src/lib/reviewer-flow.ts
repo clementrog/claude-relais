@@ -8,7 +8,7 @@
 
 import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { ReportCode } from '../types/report.js';
 import type { RiskFlags } from '../types/reviewer.js';
 import type { Task } from '../types/task.js';
@@ -106,12 +106,12 @@ export function handleReviewerDecision(decision: {
  * It checks if reviewer should be triggered, invokes it if needed, and
  * handles the decision.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param context - Reviewer flow context
  * @returns Promise resolving to ReviewerFlowResult
  */
 export async function runReviewerIfNeeded(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   context: ReviewerFlowContext
 ): Promise<ReviewerFlowResult> {
   // Reviewer must be configured

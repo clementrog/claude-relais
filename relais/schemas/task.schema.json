@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://relais.local/schemas/task.schema.json",
-  "title": "Relais Task",
+  "$id": "https://envoi.local/schemas/task.schema.json",
+  "title": "Envoi Task",
   "type": "object",
   "additionalProperties": false,
   "required": ["task_id", "milestone_id", "task_kind", "intent", "scope", "diff_limits", "verification"],
@@ -87,21 +87,10 @@
       "additionalProperties": false,
       "required": ["mode", "max_turns", "instructions"],
       "properties": {
-        "mode": { "type": "string", "enum": ["claude_code", "patch", "cursor"] },
+        "mode": { "type": "string", "enum": ["cursor"] },
         "max_turns": { "type": "integer", "minimum": 1, "maximum": 40 },
-        "instructions": { "type": "string", "minLength": 1, "maxLength": 4000 },
-        "patch": { "type": "string", "minLength": 1, "maxLength": 500000 }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "mode": { "const": "patch" } } },
-          "then": { "required": ["patch"] }
-        },
-        {
-          "if": { "properties": { "task_kind": { "const": "question" } } },
-          "then": { "properties": { "mode": { "const": "claude_code" } } }
-        }
-      ]
+        "instructions": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
     },
     "control": {
       "type": "object",
@@ -111,12 +100,39 @@
         "action": { "type": "string", "enum": ["continue", "stop"] },
         "reason": { "type": "string", "maxLength": 400 }
       }
+    },
+    "planning_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idea_ids_considered", "decision", "rationale_short"],
+      "properties": {
+        "idea_ids_considered": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "minItems": 0,
+          "maxItems": 50
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["schedule_now", "schedule_next", "defer"]
+        },
+        "rationale_short": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "suggested_milestone": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
     }
   },
   "allOf": [
     {
       "if": { "properties": { "task_kind": { "const": "question" } } },
-      "then": { "required": ["question"] }
+      "then": {
+        "required": ["question", "control"],
+        "properties": {
+          "control": {
+            "properties": { "action": { "const": "stop" } }
+          }
+        },
+        "not": { "required": ["builder"] }
+      }
     }
   ],
   "oneOf": [

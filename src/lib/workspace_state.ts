@@ -9,7 +9,15 @@
 
 import { join } from 'node:path';
 import { atomicReadJson, atomicWriteJson, AtomicFsError } from './fs.js';
-import type { WorkspaceState, BudgetCounts, BudgetDeltas } from '../types/workspace_state.js';
+import type {
+  WorkspaceState,
+  BudgetCounts,
+  BudgetDeltas,
+  IdeaInboxEntry,
+  IdeaStatus,
+  IdeaTestabilityNeed,
+  ProductQuestion,
+} from '../types/workspace_state.js';
 import type { PerMilestoneBudgets } from '../types/config.js';
 
 /**
@@ -29,6 +37,114 @@ export function createDefaultState(): WorkspaceState {
     budget_warning: false,
     last_run_id: null,
     last_verdict: null,
+    idea_inbox: [],
+    planning_digest: null,
+    open_product_questions: [],
+  };
+}
+
+/**
+ * Runtime shape guard for idea status values.
+ */
+function isIdeaStatus(value: unknown): value is IdeaStatus {
+  return value === 'new' || value === 'triaged' || value === 'scheduled' || value === 'deferred' || value === 'done';
+}
+
+/**
+ * Runtime shape guard for idea testability values.
+ */
+function isIdeaTestabilityNeed(value: unknown): value is IdeaTestabilityNeed {
+  return value === 'soon' || value === 'later' || value === 'unknown';
+}
+
+function normalizeIdeaInboxEntry(value: unknown): IdeaInboxEntry | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.id !== 'string' || candidate.id.length === 0) return null;
+  if (typeof candidate.text !== 'string' || candidate.text.length === 0) return null;
+  if (typeof candidate.submitted_at !== 'string' || candidate.submitted_at.length === 0) return null;
+  if (candidate.source !== 'interactive' && candidate.source !== 'cli' && candidate.source !== 'api') return null;
+  if (!isIdeaStatus(candidate.status)) return null;
+
+  return {
+    id: candidate.id,
+    text: candidate.text,
+    submitted_at: candidate.submitted_at,
+    source: candidate.source,
+    status: candidate.status,
+    target_by: typeof candidate.target_by === 'string' ? candidate.target_by : null,
+    testability_need: isIdeaTestabilityNeed(candidate.testability_need) ? candidate.testability_need : undefined,
+    triaged_by_task_id:
+      typeof candidate.triaged_by_task_id === 'string' ? candidate.triaged_by_task_id : undefined,
+    triaged_at: typeof candidate.triaged_at === 'string' ? candidate.triaged_at : undefined,
+  };
+}
+
+function normalizeOpenProductQuestion(value: unknown): ProductQuestion | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.id !== 'string' || candidate.id.length === 0) return null;
+  if (typeof candidate.prompt !== 'string' || candidate.prompt.length === 0) return null;
+  if (typeof candidate.created_at !== 'string' || candidate.created_at.length === 0) return null;
+  if (typeof candidate.resolved !== 'boolean') return null;
+  const choices = Array.isArray(candidate.choices)
+    ? candidate.choices.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+    : undefined;
+
+  return {
+    id: candidate.id,
+    prompt: candidate.prompt,
+    choices,
+    created_at: candidate.created_at,
+    resolved: candidate.resolved,
+    resolved_at: typeof candidate.resolved_at === 'string' ? candidate.resolved_at : undefined,
+    resolution: typeof candidate.resolution === 'string' ? candidate.resolution : undefined,
+  };
+}
+
+/**
+ * Normalizes persisted state to include optional modern planning fields while
+ * preserving legacy fields present in older STATE.json files.
+ */
+function normalizeWorkspaceState(rawState: WorkspaceState): WorkspaceState {
+  const source = rawState as WorkspaceState & Record<string, unknown>;
+  const ideaInbox = Array.isArray(source.idea_inbox)
+    ? source.idea_inbox
+        .map((entry) => normalizeIdeaInboxEntry(entry))
+        .filter((entry): entry is IdeaInboxEntry => entry !== null)
+    : [];
+
+  const openQuestions = Array.isArray(source.open_product_questions)
+    ? source.open_product_questions
+        .map((entry) => normalizeOpenProductQuestion(entry))
+        .filter((entry): entry is ProductQuestion => entry !== null)
+    : [];
+
+  const planningDigestRaw = source.planning_digest as unknown;
+  const planningDigest =
+    typeof planningDigestRaw === 'object' &&
+    planningDigestRaw !== null &&
+    typeof (planningDigestRaw as Record<string, unknown>).updated_at === 'string' &&
+    typeof (planningDigestRaw as Record<string, unknown>).summary === 'string'
+      ? {
+          updated_at: String((planningDigestRaw as Record<string, unknown>).updated_at),
+          summary: String((planningDigestRaw as Record<string, unknown>).summary),
+          last_task_id:
+            typeof (planningDigestRaw as Record<string, unknown>).last_task_id === 'string'
+              ? String((planningDigestRaw as Record<string, unknown>).last_task_id)
+              : undefined,
+          suggested_milestone:
+            typeof (planningDigestRaw as Record<string, unknown>).suggested_milestone === 'string'
+              ? String((planningDigestRaw as Record<string, unknown>).suggested_milestone)
+              : undefined,
+        }
+      : null;
+
+  return {
+    ...source,
+    idea_inbox: ideaInbox,
+    planning_digest: planningDigest,
+    open_product_questions: openQuestions,
   };
 }
 
@@ -56,7 +172,7 @@ export async function readWorkspaceState(workspaceDir: string): Promise<Workspac
       'last_run_id' in state &&
       'last_verdict' in state
     ) {
-      return state;
+      return normalizeWorkspaceState(state);
     }
     // If shape doesn't match, return default
     return createDefaultState();
@@ -105,6 +221,7 @@ export function ensureMilestone(
 
   // Milestone is different or null - create new state with reset budgets
   const newState: WorkspaceState = {
+    ...state,
     milestone_id: milestoneId,
     budgets: {
       ticks: 0,
@@ -113,8 +230,6 @@ export function ensureMilestone(
       verify_runs: 0,
     },
     budget_warning: false,
-    last_run_id: state.last_run_id,
-    last_verdict: state.last_verdict,
   };
 
   return { state: newState, changed: true };
@@ -140,6 +255,39 @@ export function applyDeltas(state: WorkspaceState, deltas: BudgetDeltas): Worksp
   return {
     ...state,
     budgets: newBudgets,
+  };
+}
+
+export interface NewIdeaInput {
+  text: string;
+  source: 'interactive' | 'cli' | 'api';
+  target_by?: string | null;
+  testability_need?: IdeaTestabilityNeed;
+}
+
+/**
+ * Appends a new idea entry to workspace state.
+ */
+export function appendIdeaEntry(state: WorkspaceState, input: NewIdeaInput): WorkspaceState {
+  const trimmedText = input.text.trim();
+  if (!trimmedText) return state;
+
+  const now = new Date().toISOString();
+  const nextId = `idea-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const entry: IdeaInboxEntry = {
+    id: nextId,
+    text: trimmedText,
+    submitted_at: now,
+    source: input.source,
+    status: 'new',
+    target_by: input.target_by ?? null,
+    testability_need: input.testability_need ?? 'unknown',
+  };
+
+  const inbox = [...(state.idea_inbox ?? []), entry];
+  return {
+    ...state,
+    idea_inbox: inbox,
   };
 }
 

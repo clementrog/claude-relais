@@ -1,25 +1,26 @@
 /**
  * Main tick execution runner.
  *
- * Implements the relais state machine:
+ * Implements the Envoi state machine:
  * LOCK → PREFLIGHT → ORCHESTRATE → BUILD → JUDGE → REPORT → END
  */
 
 import { join } from 'node:path';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { ReportData, ReportCode } from '../types/report.js';
+import { isValidReportCode } from '../constants/report_codes.js';
 import { TickPhase } from '../types/state.js';
 import type { TickState } from '../types/state.js';
 import { acquireLock, releaseLock, LockHeldError } from '../lib/lock.js';
 import { runPreflight } from '../lib/preflight.js';
 import { atomicWriteJson } from '../lib/fs.js';
-import { getHeadCommit } from '../lib/git.js';
 import {
   createInitialState,
   transitionPhase,
   addError,
 } from '../lib/state.js';
 import { runOrchestrator } from './orchestrator.js';
+import { requestStop } from './loop.js';
 import { writeBlocked, buildOrchestratorBlockedData, buildBlockedData, deleteBlocked } from '../lib/blocked.js';
 import type { BlockedData } from '../types/blocked.js';
 import { renderReportMarkdown, writeReportMarkdown } from '../lib/report.js';
@@ -38,12 +39,160 @@ import {
   type DiffCheckResult,
   type HeadCheckResult,
 } from '../lib/judge.js';
-import { rollbackToCommit } from '../lib/rollback.js';
+import { rollbackToCommit, verifyCleanWorktree } from '../lib/rollback.js';
 import { validateAllParams } from '../lib/verify-safety.js';
 import { readWorkspaceState, writeWorkspaceState, ensureMilestone } from '../lib/workspace_state.js';
+import { syncRoadmapMilestoneForWorkspace } from '../lib/roadmap.js';
 import { spawn } from 'node:child_process';
-import { isInterruptedError } from '../types/claude.js';
+import { isInterruptedError, isTimeoutError } from '../types/claude.js';
+import type { ClaudeTokenUsage } from '../types/claude.js';
+import type { WorkspaceState, ProductQuestion } from '../types/workspace_state.js';
+import type { Task } from '../types/task.js';
 import { persistBuilderFailure, persistOrchestratorFailure, type OrchestratorFailureMeta } from '../lib/history.js';
+import {
+  ensureBranchPerTick,
+  ensureBranchPerNTasks,
+  ensureBranchPerMilestone,
+} from '../lib/git_branching.js';
+import { runReviewerIfNeeded } from '../lib/reviewer-flow.js';
+import { computeRiskFlags } from '../lib/risk.js';
+import type { DiffAnalysis } from '../lib/diff.js';
+
+const TOKEN_WARNING_ORCHESTRATOR_PREFIX = '[tokens] orchestrator';
+const TOKEN_WARNING_BUILDER_PREFIX = '[tokens] builder';
+const TOKEN_WARNING_TOTAL_PREFIX = '[tokens] tick_total';
+const MAX_WARNING_CHARS = 500;
+
+interface TickTokenUsageSnapshot {
+  orchestrator: ClaudeTokenUsage | null;
+  builder: ClaudeTokenUsage | null;
+}
+
+let activeTickTokenUsage: TickTokenUsageSnapshot | null = null;
+
+function isDebugEnabled(): boolean {
+  return process.env.ENVOI_DEBUG === '1';
+}
+
+function tokenNumber(value: number | null | undefined): string {
+  return typeof value === 'number' ? String(value) : 'n/a';
+}
+
+function formatTokenUsageForLog(usage: ClaudeTokenUsage | null | undefined): string {
+  if (!usage) return 'input=n/a output=n/a total=n/a';
+  return `input=${tokenNumber(usage.input_tokens)} output=${tokenNumber(usage.output_tokens)} total=${tokenNumber(usage.total_tokens)}`;
+}
+
+function pushUniqueWarning(warnings: string[], warning: string): void {
+  if (!warnings.includes(warning)) {
+    warnings.push(warning);
+  }
+}
+
+function compactWarningText(raw: string, maxChars = MAX_WARNING_CHARS): string {
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 38))}… [truncated ${normalized.length - maxChars} chars]`;
+}
+
+function annotateReportWithTokenUsage(report: ReportData): ReportData {
+  if (!activeTickTokenUsage) return report;
+  const warnings = report.budgets.warnings;
+  const orchestrator = activeTickTokenUsage.orchestrator;
+  const builder = activeTickTokenUsage.builder;
+
+  if (orchestrator) {
+    pushUniqueWarning(
+      warnings,
+      `${TOKEN_WARNING_ORCHESTRATOR_PREFIX} input=${tokenNumber(orchestrator.input_tokens)} output=${tokenNumber(orchestrator.output_tokens)} total=${tokenNumber(orchestrator.total_tokens)}`
+    );
+  }
+
+  if (builder) {
+    pushUniqueWarning(
+      warnings,
+      `${TOKEN_WARNING_BUILDER_PREFIX} input=${tokenNumber(builder.input_tokens)} output=${tokenNumber(builder.output_tokens)} total=${tokenNumber(builder.total_tokens)}`
+    );
+  }
+
+  const total = (orchestrator?.total_tokens ?? 0) + (builder?.total_tokens ?? 0);
+  const hasKnownTotal = orchestrator?.total_tokens !== null || builder?.total_tokens !== null;
+  pushUniqueWarning(
+    warnings,
+    `${TOKEN_WARNING_TOTAL_PREFIX} total=${hasKnownTotal ? total : 'n/a'}`
+  );
+
+  return report;
+}
+
+function applyPlanningDecisionToWorkspaceState(
+  wsState: WorkspaceState,
+  task: Task
+): WorkspaceState {
+  const planningDecision = task.planning_decision;
+  if (!planningDecision) return wsState;
+
+  const now = new Date().toISOString();
+  const considered = new Set(planningDecision.idea_ids_considered);
+  const mappedStatus: 'scheduled' | 'deferred' =
+    planningDecision.decision === 'defer' ? 'deferred' : 'scheduled';
+  const updatedInbox = (wsState.idea_inbox ?? []).map((entry) => {
+    if (!considered.has(entry.id)) return entry;
+    return {
+      ...entry,
+      status: mappedStatus,
+      triaged_by_task_id: task.task_id,
+      triaged_at: now,
+    };
+  });
+
+  const summaryPrefix = planningDecision.decision === 'schedule_now'
+    ? 'Scheduled now'
+    : planningDecision.decision === 'schedule_next'
+      ? 'Scheduled next'
+      : 'Deferred';
+  const summary = `${summaryPrefix}: ${planningDecision.rationale_short}`;
+
+  return {
+    ...wsState,
+    idea_inbox: updatedInbox,
+    planning_digest: {
+      updated_at: now,
+      summary,
+      last_task_id: task.task_id,
+      suggested_milestone: planningDecision.suggested_milestone,
+    },
+  };
+}
+
+function upsertOpenProductQuestion(
+  wsState: WorkspaceState,
+  task: Task,
+  runId: string
+): WorkspaceState {
+  if (task.task_kind !== 'question' || !task.question?.prompt) {
+    return wsState;
+  }
+
+  const openQuestions = wsState.open_product_questions ?? [];
+  const existingOpen = openQuestions.find(
+    (question) => !question.resolved && question.prompt.trim() === task.question?.prompt.trim()
+  );
+  if (existingOpen) return wsState;
+
+  const question: ProductQuestion = {
+    id: `pq-${runId}`,
+    prompt: task.question.prompt,
+    choices: Array.isArray(task.question.choices) ? task.question.choices : undefined,
+    created_at: new Date().toISOString(),
+    resolved: false,
+  };
+
+  return {
+    ...wsState,
+    open_product_questions: [...openQuestions, question],
+  };
+}
 
 /**
  * Generates a basic report from tick state.
@@ -125,7 +274,7 @@ function generateReport(
  * Options for persisting run artifacts.
  */
 interface PersistArtifactsOptions {
-  config: RelaisConfig;
+  config: EnvoiConfig;
   report: ReportData;
   blockedData?: BlockedData | null;
 }
@@ -144,7 +293,8 @@ interface PersistArtifactsOptions {
  * @param options - Persistence options including config, report, and optional blocked data
  */
 async function persistRunArtifacts(options: PersistArtifactsOptions): Promise<void> {
-  const { config, report, blockedData } = options;
+  const { config, blockedData } = options;
+  const report = annotateReportWithTokenUsage(options.report);
   const workspaceDir = config.workspace_dir;
 
   // 1. ALWAYS write REPORT.json first (most critical)
@@ -305,6 +455,127 @@ function generateJudgeStopReport(
     scope: {
       ok: false,
       violations,
+      touched_paths: touchedPaths,
+    },
+    diff: {
+      files_changed: blastRadius.files_touched,
+      lines_changed: blastRadius.lines_added + blastRadius.lines_deleted,
+      diff_patch_path: '',
+    },
+    verification: {
+      exec_mode: 'argv_no_shell',
+      runs: [],
+      verify_log_path: '',
+    },
+    budgets: {
+      milestone_id: state.task?.milestone_id || 'none',
+      ticks: 0,
+      orchestrator_calls: 1,
+      builder_calls: 1,
+      verify_runs: 0,
+      estimated_cost_usd: 0,
+      warnings: [reason],
+    },
+  };
+}
+
+/**
+ * Result of performing rollback with cleanliness check.
+ */
+interface RollbackWithCleanCheckResult {
+  /**
+   * BLOCKED code if rollback failed or worktree is dirty, null if clean.
+   */
+  blockedCode: ReportCode | null;
+  /**
+   * Reason for blocking, if applicable.
+   */
+  reason: string | null;
+}
+
+/**
+ * Performs rollback and verifies worktree cleanliness.
+ *
+ * If rollback fails or worktree remains dirty, returns a BLOCKED code.
+ * Otherwise returns null (rollback succeeded and worktree is clean).
+ *
+ * @param baseCommit - Commit to rollback to
+ * @param untrackedPaths - Untracked paths to remove
+ * @returns RollbackWithCleanCheckResult with blocked code if needed
+ */
+function performRollbackWithCleanCheck(
+  baseCommit: string,
+  untrackedPaths: string[]
+): RollbackWithCleanCheckResult {
+  console.log(`[${TickPhase.JUDGE}] Rolling back to ${baseCommit}`);
+  const rollbackResult = rollbackToCommit(baseCommit, untrackedPaths);
+  
+  if (!rollbackResult.ok) {
+    console.log(`[${TickPhase.JUDGE}] Rollback failed: ${rollbackResult.error}`);
+    return {
+      blockedCode: 'BLOCKED_ROLLBACK_FAILED',
+      reason: `Rollback failed: ${rollbackResult.error}`,
+    };
+  }
+  
+  // Verify worktree is clean after rollback
+  const isClean = verifyCleanWorktree();
+  if (!isClean) {
+    console.log(`[${TickPhase.JUDGE}] Rollback succeeded but worktree is dirty`);
+    return {
+      blockedCode: 'BLOCKED_ROLLBACK_DIRTY',
+      reason: 'Rollback succeeded but worktree remains dirty (uncommitted changes or untracked files)',
+    };
+  }
+  
+  console.log(`[${TickPhase.JUDGE}] Rollback succeeded and worktree is clean`);
+  return {
+    blockedCode: null,
+    reason: null,
+  };
+}
+
+/**
+ * Generates a BLOCKED report for rollback failures.
+ */
+function generateRollbackBlockedReport(
+  state: TickState,
+  blockedCode: ReportCode,
+  reason: string,
+  blastRadius: { files_touched: number; lines_added: number; lines_deleted: number; new_files: number },
+  touchedPaths: string[]
+): ReportData {
+  const endedAt = new Date().toISOString();
+  const startedAt = new Date(state.started_at);
+  const endedAtDate = new Date(endedAt);
+  const durationMs = endedAtDate.getTime() - startedAt.getTime();
+
+  return {
+    run_id: state.run_id,
+    started_at: state.started_at,
+    ended_at: endedAt,
+    duration_ms: durationMs,
+    base_commit: state.base_commit,
+    head_commit: state.base_commit,
+    task: state.task
+      ? {
+          task_id: state.task.task_id,
+          milestone_id: state.task.milestone_id,
+          task_kind: state.task.task_kind,
+          intent: state.task.intent,
+        }
+      : {
+          task_id: 'none',
+          milestone_id: 'none',
+          task_kind: 'execute',
+          intent: 'No task',
+        },
+    verdict: 'blocked',
+    code: blockedCode,
+    blast_radius: blastRadius,
+    scope: {
+      ok: false,
+      violations: [],
       touched_paths: touchedPaths,
     },
     diff: {
@@ -520,7 +791,7 @@ async function runVerificationPhase(
 }
 
 /**
- * Executes one complete tick of the relais loop.
+ * Executes one complete tick of the envoi loop.
  *
  * Phases:
  * 1. LOCK: Acquire lock to prevent concurrent runs
@@ -531,17 +802,44 @@ async function runVerificationPhase(
  * 6. REPORT: Generate REPORT.json and REPORT.md
  * 7. END: Release lock and return report
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param signal - Optional AbortSignal for cancellation
  * @returns Report data for this tick
  */
+/**
+ * Sets up SIGINT/SIGTERM handlers for graceful shutdown.
+ * Must be called after lock acquisition and cleaned up before lock release.
+ * Also notifies the loop to stop after this tick completes.
+ */
+function setupSignalHandlers(): () => void {
+  const sigintHandler = () => {
+    console.log('\nSIGINT received during tick');
+    requestStop(); // Notify loop to stop after this tick
+  };
+  const sigtermHandler = () => {
+    console.log('\nSIGTERM received during tick');
+    requestStop(); // Notify loop to stop after this tick
+  };
+
+  process.on('SIGINT', sigintHandler);
+  process.on('SIGTERM', sigtermHandler);
+
+  return () => {
+    process.off('SIGINT', sigintHandler);
+    process.off('SIGTERM', sigtermHandler);
+  };
+}
+
 export async function runTick(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   signal?: AbortSignal
 ): Promise<ReportData> {
   let state: TickState | undefined;
   let lockAcquired = false;
+  let signalCleanup: (() => void) | null = null;
+  let currentBranchName: string | null = null;
   const lockPath = config.runner.lockfile;
+  activeTickTokenUsage = { orchestrator: null, builder: null };
 
   try {
     // Phase 1: LOCK
@@ -551,9 +849,12 @@ export async function runTick(
       lockAcquired = true;
       console.log(`[${TickPhase.LOCK}] Lock acquired (PID: ${lockInfo.pid})`);
 
-      // Get base commit before proceeding
-      const baseCommit = getHeadCommit();
-      state = createInitialState(config, baseCommit);
+      // Install signal handlers AFTER lock acquisition
+      signalCleanup = setupSignalHandlers();
+
+      // Initialize state without touching git yet.
+      // Preflight is responsible for git checks (and for deriving base_commit).
+      state = createInitialState(config, '');
     } catch (error) {
       if (error instanceof LockHeldError) {
         const report = generateReport(
@@ -587,7 +888,11 @@ export async function runTick(
     const preflightResult = await runPreflight(config);
 
     if (!preflightResult.ok) {
-      // Preflight failed - release lock and return blocked report
+      // Preflight failed - cleanup handlers and release lock
+      if (signalCleanup) {
+        signalCleanup();
+        signalCleanup = null;
+      }
       if (lockAcquired) {
         await releaseLock(lockPath);
         lockAcquired = false;
@@ -637,6 +942,8 @@ export async function runTick(
     let orchestratorResult;
     try {
       orchestratorResult = await runOrchestrator(state, signal);
+      activeTickTokenUsage.orchestrator = orchestratorResult.tokenUsage ?? null;
+      console.log(`[${TickPhase.ORCHESTRATE}] Tokens: ${formatTokenUsageForLog(orchestratorResult.tokenUsage)}`);
     } catch (error) {
       // Check if this is a transport stall
       if (isTransportStallError(error)) {
@@ -658,7 +965,30 @@ export async function runTick(
         await persistRunArtifacts({ config, report, blockedData });
         return report;
       }
-      // Not a stall - rethrow
+
+      // Check if this is an orchestrator timeout
+      if (isTimeoutError(error)) {
+        console.log(`[${TickPhase.ORCHESTRATE}] Orchestrator timeout detected`);
+
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+
+        // Get configured timeout for display
+        const timeoutSeconds = config.orchestrator.timeout_seconds ?? config.runner.max_tick_seconds;
+        const timeoutDisplay = `${timeoutSeconds}s`;
+
+        const report = generateReport(state, 'STOP_ORCHESTRATOR_TIMEOUT', 'stop');
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = 1;
+        report.task.intent = `Orchestrator timed out after ${timeoutDisplay}`;
+        report.budgets.warnings.push(`Orchestrator timed out after ${timeoutDisplay}`);
+        await persistRunArtifacts({ config, report });
+        return report;
+      }
+
+      // Not a stall or timeout - rethrow
       throw error;
     }
 
@@ -682,8 +1012,19 @@ export async function runTick(
         orchestratorResult.error || 'Orchestrator output invalid',
         {
           schema_errors: schemaErrors,
-          stdout_excerpt: orchestratorResult.rawResponse?.slice(-2000),
-          json_excerpt: orchestratorResult.rawResponse?.slice(0, 1000),
+          stdout_excerpt: (orchestratorResult.rawCliStdout ?? orchestratorResult.rawResponse ?? '').slice(-2000),
+          stderr_excerpt: (orchestratorResult.rawStderr ?? '').slice(-2000),
+          json_excerpt: (() => {
+            const extracted = orchestratorResult.diagnostics?.extractedJson;
+            if (extracted !== undefined && extracted !== null) {
+              try {
+                return JSON.stringify(extracted).slice(0, 1000);
+              } catch {
+                // fall through
+              }
+            }
+            return (orchestratorResult.rawCliStdout ?? orchestratorResult.rawResponse ?? '').slice(0, 1000);
+          })(),
           extract_method: orchestratorResult.diagnostics?.extractMethod || 'direct_parse',
         }
       );
@@ -717,7 +1058,7 @@ export async function runTick(
         };
         await persistOrchestratorFailure(
           state.run_id,
-          orchestratorResult.rawResponse,
+          orchestratorResult.rawCliStdout ?? orchestratorResult.rawResponse,
           orchestratorResult.rawStderr,
           orchestratorResult.diagnostics?.extractedJson ?? null,
           orchestratorResult.diagnostics?.schemaErrors ?? null,
@@ -744,43 +1085,345 @@ export async function runTick(
       task: orchestratorResult.task,
     };
     console.log(`[${TickPhase.ORCHESTRATE}] Task proposed: ${orchestratorResult.task.task_id} (${orchestratorResult.task.task_kind})`);
+    const task = orchestratorResult.task;
 
-    // PR6: Check for control.action='stop' signal from orchestrator
-    if (orchestratorResult.task.control?.action === 'stop') {
-      console.log(`[${TickPhase.ORCHESTRATE}] Control action: stop (reason: ${orchestratorResult.task.control.reason || 'none'})`);
+    // Persist planning metadata and milestone context early for crash tolerance.
+    let wsState = await readWorkspaceState(config.workspace_dir);
+    wsState = applyPlanningDecisionToWorkspaceState(wsState, task);
+    wsState = upsertOpenProductQuestion(wsState, task, state.run_id);
+
+    if (task.milestone_id) {
+      const result = ensureMilestone(wsState, task.milestone_id);
+      wsState = result.state;
+      if (result.changed) {
+        console.log(`Milestone persisted early: ${task.milestone_id}`);
+      }
+      try {
+        const synced = await syncRoadmapMilestoneForWorkspace(config.workspace_dir, task.milestone_id);
+        if (synced && result.changed) {
+          console.log(`Roadmap synced for milestone: ${task.milestone_id}`);
+        }
+      } catch (error) {
+        console.warn(
+          `[${TickPhase.ORCHESTRATE}] Failed to sync ROADMAP.json milestone state: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+    await writeWorkspaceState(config.workspace_dir, wsState);
+
+    // control.action='stop' acts as completion stop for non-question tasks.
+    if (task.task_kind !== 'question' && task.control?.action === 'stop') {
+      console.log(`[${TickPhase.ORCHESTRATE}] Control action: stop (reason: ${task.control.reason || 'none'})`);
       if (lockAcquired) {
         await releaseLock(lockPath);
         lockAcquired = false;
       }
 
-      const report = generateReport(
-        state,
-        'SUCCESS',
-        'success'
-      );
+      const report = generateReport(state, 'SUCCESS', 'success');
       report.budgets.ticks = 1;
       report.budgets.orchestrator_calls = 1;
-      // Annotate the report with control reason
-      report.budgets.warnings.push(`Orchestrator signaled stop: ${orchestratorResult.task.control.reason || 'no reason given'}`);
+      report.budgets.warnings.push(`Orchestrator signaled stop: ${task.control.reason || 'no reason given'}`);
       await persistRunArtifacts({ config, report });
       return report;
     }
 
-    // PR3: Persist milestone_id early for crash tolerance.
-    // If crash happens during build/judge/verify, restart will know which milestone was active.
-    const wsState = await readWorkspaceState(config.workspace_dir);
-    const task = orchestratorResult.task;
-    if (task.milestone_id) {
-      const { state: newState, changed } = ensureMilestone(wsState, task.milestone_id);
-      if (changed) {
-        await writeWorkspaceState(config.workspace_dir, newState);
-        console.log(`Milestone persisted early: ${task.milestone_id}`);
+    // Question tasks: ask the user and stop immediately (no builder).
+    if (task.task_kind === 'question') {
+      // Safety: question tasks must have zero side effects. If anything changed between base_commit and now,
+      // rollback and STOP with STOP_QUESTION_SIDE_EFFECTS.
+      const touched = getTouchedFiles(state.base_commit);
+      if (touched.all.length > 0) {
+        const blastRadius = computeBlastRadius(state.base_commit, touched);
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = orchestratorResult.attempts;
+          report.budgets.builder_calls = 0;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
+        }
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+        const report = generateJudgeStopReport(
+          state,
+          'STOP_QUESTION_SIDE_EFFECTS',
+          blastRadius,
+          touched.all,
+          touched.all,
+          'Question task had side effects (git diff not empty)'
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = orchestratorResult.attempts;
+        report.budgets.builder_calls = 0;
+        await persistRunArtifacts({ config, report });
+        return report;
+      }
+
+      const prompt = task.question?.prompt ?? '(missing question.prompt)';
+      const choices = Array.isArray(task.question?.choices) ? task.question!.choices : [];
+      console.log('\n[QUESTION]');
+      console.log(prompt);
+      if (choices.length > 0) {
+        console.log('\nChoices:');
+        for (const c of choices) console.log(`- ${c}`);
+      }
+      console.log('');
+
+      if (lockAcquired) {
+        await releaseLock(lockPath);
+        lockAcquired = false;
+      }
+
+      const report = generateReport(state, 'STOP_ORCHESTRATOR_ASK_QUESTION', 'stop');
+      report.budgets.ticks = 1;
+      report.budgets.orchestrator_calls = orchestratorResult.attempts;
+      report.budgets.builder_calls = 0;
+      report.task.intent = `Orchestrator asked a question:\n${prompt}${
+        choices.length > 0 ? `\n\nChoices:\n${choices.map((c) => `- ${c}`).join('\n')}` : ''
+      }`;
+      report.budgets.warnings.push('Answer the question, then rerun: envoi tick');
+      await persistRunArtifacts({ config, report });
+      return report;
+    }
+
+    // Cursor-only guardrail: all execute tasks must use the cursor builder.
+    if (task.task_kind === 'execute' && task.builder && task.builder.mode !== 'cursor') {
+      if (lockAcquired) {
+        await releaseLock(lockPath);
+        lockAcquired = false;
+      }
+
+      const reason = `Task requested builder.mode="${task.builder.mode}", but this runtime only allows builder.mode="cursor".`;
+      const report = generateReport(
+        {
+          ...state,
+          errors: [reason],
+        },
+        'BLOCKED_BUILDER_MODE_NOT_ALLOWED',
+        'blocked'
+      );
+      report.budgets.ticks = 1;
+      report.budgets.orchestrator_calls = orchestratorResult.attempts;
+      report.budgets.builder_calls = 0;
+      report.budgets.warnings.push(
+        `${reason} Reconfigure onboarding/builder to cursor and rerun '${config.product_name} tick'.`
+      );
+      const blockedData = buildBlockedData(
+        'BLOCKED_BUILDER_MODE_NOT_ALLOWED',
+        `${reason} Use cursor agent as the only builder.`,
+      );
+      await persistRunArtifacts({ config, report, blockedData });
+      return report;
+    }
+
+    // Optional reviewer gate (Second Brain) before builder execution.
+    if (task.task_kind === 'execute' && config.reviewer?.enabled && config.reviewer.trigger) {
+      const emptyAnalysis: DiffAnalysis = {
+        files_touched: 0,
+        lines_added: 0,
+        lines_deleted: 0,
+        new_files: 0,
+        touched_paths: [],
+      };
+      const currentTick = wsState.budgets.ticks + 1;
+      const riskFlags = computeRiskFlags({
+        analysis: emptyAnalysis,
+        limits: task.diff_limits,
+        scope: task.scope,
+        trigger: config.reviewer.trigger,
+        stopHistory: [],
+        currentTick,
+        verifyFailed: false,
+        budgetWarning: wsState.budget_warning,
+      });
+
+      const reviewerResult = await runReviewerIfNeeded(config, {
+        riskFlags,
+        task,
+        stopHistory: [],
+        currentTick,
+        verifyFailed: false,
+        budgetWarning: wsState.budget_warning,
+        touchedPaths: [],
+      });
+
+      if (reviewerResult.stopCode) {
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+
+        if (reviewerResult.stopCode === 'STOP_REVIEWER_ASK_QUESTION' && reviewerResult.question) {
+          console.log('\n[REVIEW QUESTION]');
+          console.log(reviewerResult.question.prompt);
+          if (reviewerResult.question.choices && reviewerResult.question.choices.length > 0) {
+            console.log('\nChoices:');
+            for (const choice of reviewerResult.question.choices) {
+              console.log(`- ${choice}`);
+            }
+          }
+          console.log('');
+        }
+
+        const report = generateReport(state, reviewerResult.stopCode, 'stop');
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = orchestratorResult.attempts;
+        report.budgets.builder_calls = 0;
+        if (reviewerResult.reviewerError) {
+          report.reviewer_error = reviewerResult.reviewerError;
+          report.budgets.warnings.push(`Reviewer error: ${compactWarningText(reviewerResult.reviewerError)}`);
+        }
+        if (reviewerResult.stopCode === 'STOP_REVIEWER_FORCED_PATCH') {
+          report.budgets.warnings.push('Reviewer requested manual intervention before builder execution.');
+        } else if (reviewerResult.stopCode === 'STOP_REVIEWER_ASK_QUESTION') {
+          report.budgets.warnings.push('Reviewer asked a product question; answer then rerun.');
+        }
+        await persistRunArtifacts({ config, report });
+        return report;
+      }
+    }
+
+    // Guardrail: prevent stale task execution when configured builder mode is not cursor.
+    if (task.task_kind === 'execute' && task.builder) {
+      const configuredMode = config.builder.default_mode;
+      if (configuredMode !== 'cursor') {
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+
+        const mismatchReason =
+          `Config has builder.default_mode="${configuredMode}" but cursor-only mode is required.`;
+        const report = generateReport(
+          {
+            ...state,
+            errors: [mismatchReason],
+          },
+          'BLOCKED_MISSING_CONFIG',
+          'blocked'
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = orchestratorResult.attempts;
+        report.budgets.builder_calls = 0;
+        report.budgets.warnings.push(
+          `${mismatchReason} Run '${config.product_name} builder --set cursor' or rerun onboarding, then run '${config.product_name} tick'.`
+        );
+        const blockedData = buildBlockedData(
+          'BLOCKED_MISSING_CONFIG',
+          `${mismatchReason} Switch default builder to cursor.`,
+        );
+        await persistRunArtifacts({ config, report, blockedData });
+        return report;
+      }
+    }
+
+    // Branching: Create/switch branch before BUILD (runner-owned)
+    if (config.git?.branching && config.git.branching.mode !== 'off' && task.task_kind === 'execute') {
+      console.log(`[BRANCHING] Ensuring branch for mode=${config.git.branching.mode}...`);
+      
+      let branchResult;
+      let branchingError: string | null = null;
+      
+      // Validate config based on mode
+      if (config.git.branching.mode === 'per_n_tasks') {
+        if (!config.git.branching.n_tasks || config.git.branching.n_tasks < 1) {
+          branchingError = `per_n_tasks mode requires n_tasks >= 1, but got ${config.git.branching.n_tasks}`;
+        } else {
+          // Calculate batch index: use builder_calls as proxy for task count
+          // Each execute task results in a builder call
+          const batchIndex = Math.floor(wsState.budgets.builder_calls / config.git.branching.n_tasks);
+          branchResult = ensureBranchPerNTasks(config.git.branching, {
+            task_id: task.task_id,
+            milestone_id: task.milestone_id,
+            run_id: state.run_id,
+            tick_count: wsState.budgets.ticks + 1,
+            seq: batchIndex,
+            batch_index: batchIndex,
+          });
+        }
+      } else if (config.git.branching.mode === 'per_milestone') {
+        if (!task.milestone_id) {
+          branchingError = 'per_milestone mode requires task.milestone_id';
+        } else {
+          branchResult = ensureBranchPerMilestone(config.git.branching, {
+            task_id: task.task_id,
+            milestone_id: task.milestone_id,
+            run_id: state.run_id,
+            tick_count: wsState.budgets.ticks + 1,
+          });
+        }
+      } else if (config.git.branching.mode === 'per_tick') {
+        branchResult = ensureBranchPerTick(config.git.branching, {
+          task_id: task.task_id,
+          milestone_id: task.milestone_id,
+          run_id: state.run_id,
+          tick_count: wsState.budgets.ticks + 1,
+        });
+      } else {
+        // Unknown mode - should not happen due to TypeScript, but handle gracefully
+        branchingError = `Unsupported branching mode: ${config.git.branching.mode}`;
+      }
+      
+      // Handle branching errors or failures
+      if (branchingError || (branchResult && !branchResult.ok)) {
+        const errorMsg = branchingError || branchResult?.error || 'Unknown branching error';
+        
+        // Branching failed or config invalid - return BLOCKED report
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+        
+        const report = generateReport(
+          {
+            ...state,
+            errors: [`Branch creation/switch failed: ${errorMsg}`],
+          },
+          'BLOCKED_BRANCH_FAILED',
+          'blocked'
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = 1;
+        report.budgets.warnings.push(
+          `Failed to create/switch branch: ${errorMsg}. ` +
+          `Check git repository state and ensure branching configuration is valid.`
+        );
+        const blockedData = buildBlockedData(
+          'BLOCKED_BRANCH_FAILED',
+          `Branch creation/switch failed: ${errorMsg}`,
+        );
+        await persistRunArtifacts({ config, report, blockedData });
+        return report;
+      }
+      
+      if (branchResult) {
+        currentBranchName = branchResult.branchName;
+        console.log(`[BRANCHING] Branch ensured: ${currentBranchName} (existed: ${branchResult.existed})`);
       }
     }
 
     // Phase 4: BUILD
     console.log(`[${TickPhase.BUILD}] Running builder...`);
-    if (process.env.RELAIS_DEBUG === '1' && state.task) {
+    if (isDebugEnabled() && state.task) {
       console.log(`[BUILD_DEBUG] task_id=${state.task.task_id}, task_kind=${state.task.task_kind}, max_turns=${state.task.builder?.max_turns ?? 'N/A'}`);
     }
     state = transitionPhase(state, TickPhase.BUILD);
@@ -809,6 +1452,8 @@ export async function runTick(
     let builderResult;
     try {
       builderResult = await runBuilder(state, state.task, signal);
+      activeTickTokenUsage.builder = builderResult.tokenUsage ?? null;
+      console.log(`[${TickPhase.BUILD}] Tokens: ${formatTokenUsageForLog(builderResult.tokenUsage)}`);
     } catch (error) {
       // Check if this is a transport stall
       if (isTransportStallError(error)) {
@@ -842,9 +1487,113 @@ export async function runTick(
         lockAcquired = false;
       }
 
-      // Map parseErrorKind to granular STOP codes
+      // Check for cursor missing config - this is a deterministic BLOCKED condition
+      if (builderResult.validationErrors.includes('STOP_CURSOR_CONFIG_MISSING')) {
+        // Persist builder failure artifacts for debugging
+        if (builderResult.rawResponse) {
+          try {
+            await persistBuilderFailure(
+              state.run_id,
+              builderResult.rawResponse,
+              null, // stderr not available from builder
+              {
+                kind: 'cli_error',
+                message: builderResult.validationErrors.join('; ') || 'Builder invocation failed',
+                details: { validationErrors: builderResult.validationErrors },
+              },
+              config
+            );
+          } catch (persistError) {
+            // Log but don't fail the tick due to persistence issues
+            console.warn(`Failed to persist builder failure: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+          }
+        }
+
+        const report = generateReport(
+          {
+            ...state,
+            builder_result: builderResult.result,
+            errors: ['Builder mode is cursor but cursor config is missing'],
+          },
+          'BLOCKED_MISSING_CONFIG',
+          'blocked'
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = 1;
+        report.budgets.builder_calls = 1;
+        report.budgets.warnings.push(
+          'Task requested builder.mode="cursor" but config is missing builder.cursor. ' +
+          `Configure cursor builder settings, then rerun '${config.product_name} tick'.`
+        );
+        const blockedData = buildBlockedData(
+          'BLOCKED_MISSING_CONFIG',
+          'Cursor builder mode selected but builder.cursor config is missing.',
+        );
+        await persistRunArtifacts({ config, report, blockedData });
+        return report;
+      }
+
+      // Check if validationErrors contains a known BLOCKED_* report code
+      const explicitBlockedCode = builderResult.validationErrors.find(
+        (err) => isValidReportCode(err) && err.startsWith('BLOCKED_')
+      );
+      if (explicitBlockedCode) {
+        // Persist builder failure artifacts for debugging
+        if (builderResult.rawResponse) {
+          try {
+            await persistBuilderFailure(
+              state.run_id,
+              builderResult.rawResponse,
+              null, // stderr not available from builder
+              {
+                kind: 'cli_error',
+                message: builderResult.validationErrors.join('; ') || 'Builder invocation failed',
+                details: { validationErrors: builderResult.validationErrors },
+              },
+              config
+            );
+          } catch (persistError) {
+            // Log but don't fail the tick due to persistence issues
+            console.warn(`Failed to persist builder failure: ${persistError instanceof Error ? persistError.message : String(persistError)}`);
+          }
+        }
+
+        const report = generateReport(
+          {
+            ...state,
+            builder_result: builderResult.result,
+            errors: builderResult.rawResponse
+              ? [`Builder preflight failed: ${builderResult.rawResponse.substring(0, 200)}`]
+              : ['Builder preflight failed'],
+          },
+          explicitBlockedCode as ReportCode,
+          'blocked'
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = 1;
+        report.budgets.builder_calls = 1;
+        if (builderResult.rawResponse) {
+          report.budgets.warnings.push(compactWarningText(builderResult.rawResponse));
+        }
+        const blockedData = buildBlockedData(
+          explicitBlockedCode as ReportCode,
+          builderResult.rawResponse || 'Builder preflight failed',
+        );
+        await persistRunArtifacts({ config, report, blockedData });
+        return report;
+      }
+
+      // Prefer explicit STOP_* codes from validationErrors over parseErrorKind mapping
       let reportCode: ReportCode = 'STOP_INTERRUPTED';
-      if (builderResult.parseErrorKind) {
+      
+      // Check if validationErrors contains a known STOP_* report code
+      const explicitStopCode = builderResult.validationErrors.find(
+        (err) => isValidReportCode(err) && err.startsWith('STOP_')
+      );
+      if (explicitStopCode) {
+        reportCode = explicitStopCode as ReportCode;
+      } else if (builderResult.parseErrorKind) {
+        // Fall back to parseErrorKind mapping if no explicit code found
         switch (builderResult.parseErrorKind) {
           case 'json_parse':
             reportCode = 'STOP_BUILDER_JSON_PARSE';
@@ -977,12 +1726,32 @@ export async function runTick(
       );
       if (!scopeCheck.ok && scopeCheck.stopCode) {
         console.log(`[${TickPhase.JUDGE}] Scope violation: ${scopeCheck.stopCode}`);
-        // Rollback
-        console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-        const rollbackResult = rollbackToCommit(state.base_commit, touched.untracked);
-        if (!rollbackResult.ok) {
-          console.log(`[${TickPhase.JUDGE}] Rollback failed: ${rollbackResult.error}`);
+        // Rollback and check cleanliness
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          // Rollback failed or worktree dirty - return BLOCKED
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = 1;
+          report.budgets.builder_calls = 1;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
         }
+        // Rollback succeeded and worktree is clean - proceed with STOP code
         if (lockAcquired) {
           await releaseLock(lockPath);
           lockAcquired = false;
@@ -1011,12 +1780,32 @@ export async function runTick(
     const diffCheck = checkDiffLimits(blastRadius, diffLimits);
     if (!diffCheck.ok && diffCheck.stopCode) {
       console.log(`[${TickPhase.JUDGE}] Diff too large: ${diffCheck.reason}`);
-      // Rollback
-      console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-      const rollbackResult = rollbackToCommit(state.base_commit, touched.untracked);
-      if (!rollbackResult.ok) {
-        console.log(`[${TickPhase.JUDGE}] Rollback failed: ${rollbackResult.error}`);
+      // Rollback and check cleanliness
+      const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+      if (rollbackCheck.blockedCode) {
+        // Rollback failed or worktree dirty - return BLOCKED
+        if (lockAcquired) {
+          await releaseLock(lockPath);
+          lockAcquired = false;
+        }
+        const report = generateRollbackBlockedReport(
+          state,
+          rollbackCheck.blockedCode,
+          rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          blastRadius,
+          touched.all
+        );
+        report.budgets.ticks = 1;
+        report.budgets.orchestrator_calls = 1;
+        report.budgets.builder_calls = 1;
+        const blockedData = buildBlockedData(
+          rollbackCheck.blockedCode,
+          rollbackCheck.reason || 'Rollback failed or worktree dirty',
+        );
+        await persistRunArtifacts({ config, report, blockedData });
+        return report;
       }
+      // Rollback succeeded and worktree is clean - proceed with STOP code
       if (lockAcquired) {
         await releaseLock(lockPath);
         lockAcquired = false;
@@ -1040,12 +1829,32 @@ export async function runTick(
     if (state.task && touched.all.length > 0) {
       if (state.task.task_kind === 'question') {
         console.log(`[${TickPhase.JUDGE}] Question task has side effects`);
-        // Rollback
-        console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-        const rollbackResult = rollbackToCommit(state.base_commit, touched.untracked);
-        if (!rollbackResult.ok) {
-          console.log(`[${TickPhase.JUDGE}] Rollback failed: ${rollbackResult.error}`);
+        // Rollback and check cleanliness
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          // Rollback failed or worktree dirty - return BLOCKED
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = 1;
+          report.budgets.builder_calls = 1;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
         }
+        // Rollback succeeded and worktree is clean - proceed with STOP code
         if (lockAcquired) {
           await releaseLock(lockPath);
           lockAcquired = false;
@@ -1066,12 +1875,32 @@ export async function runTick(
       }
       if (state.task.task_kind === 'verify_only') {
         console.log(`[${TickPhase.JUDGE}] Verify-only task has side effects`);
-        // Rollback
-        console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-        const rollbackResult = rollbackToCommit(state.base_commit, touched.untracked);
-        if (!rollbackResult.ok) {
-          console.log(`[${TickPhase.JUDGE}] Rollback failed: ${rollbackResult.error}`);
+        // Rollback and check cleanliness
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          // Rollback failed or worktree dirty - return BLOCKED
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = 1;
+          report.budgets.builder_calls = 1;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
         }
+        // Rollback succeeded and worktree is clean - proceed with STOP code
         if (lockAcquired) {
           await releaseLock(lockPath);
           lockAcquired = false;
@@ -1110,9 +1939,32 @@ export async function runTick(
         const paramCheck = validateAllParams(allParams, config.verification);
         if (!paramCheck.ok) {
           console.log(`[${TickPhase.JUDGE}] Verification params tainted: ${paramCheck.reason}`);
-          // Rollback
-          console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-          rollbackToCommit(state.base_commit, touched.untracked);
+          // Rollback and check cleanliness
+          const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+          if (rollbackCheck.blockedCode) {
+            // Rollback failed or worktree dirty - return BLOCKED
+            if (lockAcquired) {
+              await releaseLock(lockPath);
+              lockAcquired = false;
+            }
+            const report = generateRollbackBlockedReport(
+              state,
+              rollbackCheck.blockedCode,
+              rollbackCheck.reason || 'Rollback failed or worktree dirty',
+              blastRadius,
+              touched.all
+            );
+            report.budgets.ticks = 1;
+            report.budgets.orchestrator_calls = 1;
+            report.budgets.builder_calls = 1;
+            const blockedData = buildBlockedData(
+              rollbackCheck.blockedCode,
+              rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            );
+            await persistRunArtifacts({ config, report, blockedData });
+            return report;
+          }
+          // Rollback succeeded and worktree is clean - proceed with STOP code
           if (lockAcquired) {
             await releaseLock(lockPath);
             lockAcquired = false;
@@ -1147,9 +1999,34 @@ export async function runTick(
       
       if (!fastResult.ok && fastResult.stopCode) {
         console.log(`[${TickPhase.JUDGE}] Fast verification failed: ${fastResult.reason}`);
-        // Rollback
-        console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-        rollbackToCommit(state.base_commit, touched.untracked);
+        // Rollback and check cleanliness
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          // Rollback failed or worktree dirty - return BLOCKED
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.verification.runs = fastResult.runs;
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = 1;
+          report.budgets.builder_calls = 1;
+          report.budgets.verify_runs = fastResult.runs.length;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
+        }
+        // Rollback succeeded and worktree is clean - proceed with STOP code
         if (lockAcquired) {
           await releaseLock(lockPath);
           lockAcquired = false;
@@ -1186,9 +2063,36 @@ export async function runTick(
       
       if (!slowResult.ok && slowResult.stopCode) {
         console.log(`[${TickPhase.JUDGE}] Slow verification failed: ${slowResult.reason}`);
-        // Rollback
-        console.log(`[${TickPhase.JUDGE}] Rolling back to ${state.base_commit}`);
-        rollbackToCommit(state.base_commit, touched.untracked);
+        // Rollback and check cleanliness
+        const rollbackCheck = performRollbackWithCleanCheck(state.base_commit, touched.untracked);
+        if (rollbackCheck.blockedCode) {
+          // Rollback failed or worktree dirty - return BLOCKED
+          if (lockAcquired) {
+            await releaseLock(lockPath);
+            lockAcquired = false;
+          }
+          const report = generateRollbackBlockedReport(
+            state,
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+            blastRadius,
+            touched.all
+          );
+          report.verification.runs = slowResult.runs;
+          // Count fast verification runs that passed (from state.task.verification.fast)
+          const fastVerifyCount = state.task?.verification?.fast?.length || 0;
+          report.budgets.ticks = 1;
+          report.budgets.orchestrator_calls = 1;
+          report.budgets.builder_calls = 1;
+          report.budgets.verify_runs = fastVerifyCount + slowResult.runs.length;
+          const blockedData = buildBlockedData(
+            rollbackCheck.blockedCode,
+            rollbackCheck.reason || 'Rollback failed or worktree dirty',
+          );
+          await persistRunArtifacts({ config, report, blockedData });
+          return report;
+        }
+        // Rollback succeeded and worktree is clean - proceed with STOP code
         if (lockAcquired) {
           await releaseLock(lockPath);
           lockAcquired = false;
@@ -1229,6 +2133,21 @@ export async function runTick(
     report.budgets.orchestrator_calls = 1;
     report.budgets.builder_calls = 1;
     report.budgets.verify_runs = fastVerifyCount + slowVerifyCount;
+    
+    // Add branch name to warnings for traceability (if branching was used)
+    if (currentBranchName) {
+      report.budgets.warnings.push(`Branch: ${currentBranchName}`);
+    }
+
+    const orchestratorTotal = activeTickTokenUsage?.orchestrator?.total_tokens ?? null;
+    const builderTotal = activeTickTokenUsage?.builder?.total_tokens ?? null;
+    const tickTotal =
+      orchestratorTotal !== null || builderTotal !== null
+        ? (orchestratorTotal ?? 0) + (builderTotal ?? 0)
+        : null;
+    console.log(
+      `[${TickPhase.REPORT}] Token totals: orchestrator=${tokenNumber(orchestratorTotal)} builder=${tokenNumber(builderTotal)} tick_total=${tokenNumber(tickTotal)}`
+    );
 
     await persistRunArtifacts({ config, report });
     console.log(`[${TickPhase.REPORT}] Artifacts persisted`);
@@ -1236,12 +2155,25 @@ export async function runTick(
     // Phase 7: END
     console.log(`[${TickPhase.END}] Releasing lock...`);
     state = transitionPhase(state, TickPhase.END);
+
+    // Cleanup signal handlers before releasing lock
+    if (signalCleanup) {
+      signalCleanup();
+      signalCleanup = null;
+    }
+
     await releaseLock(lockPath);
     lockAcquired = false;
     console.log(`[${TickPhase.END}] Lock released`);
 
     return report;
   } catch (error) {
+    // Cleanup signal handlers before releasing lock
+    if (signalCleanup) {
+      signalCleanup();
+      signalCleanup = null;
+    }
+
     // Ensure lock is released on error
     if (lockAcquired) {
       try {

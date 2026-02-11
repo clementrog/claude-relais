@@ -1,7 +1,7 @@
 /**
- * Relais library utilities.
+ * Envoi library utilities.
  *
- * This module exports all public utilities for the Relais project.
+ * This module exports all public utilities for the Envoi project.
  */
 
 export {
@@ -10,6 +10,17 @@ export {
   cleanupTmpFiles,
   AtomicFsError,
 } from './fs.js';
+
+export {
+  readRoadmap,
+  writeRoadmap,
+  normalizeRoadmapMilestones,
+  syncRoadmapMilestone,
+  syncRoadmapMilestoneForWorkspace,
+  type RoadmapFile,
+  type RoadmapMilestone,
+  type RoadmapMilestoneStatus,
+} from './roadmap.js';
 
 export {
   loadConfig,
@@ -35,6 +46,8 @@ export {
   getDiffFiles,
   getUntrackedFiles,
   getCurrentBranch,
+  stashRelaisFiles,
+  popRelaisStash,
   stashPilotFiles,
   popPilotStash,
 } from './git.js';
@@ -160,7 +173,9 @@ export {
 
 export {
   checkCodexCli,
+  checkClaudeCodeCli,
   type ReviewerDoctorResult,
+  type ClaudeCliDoctorResult,
 } from './doctor.js';
 
 export {
@@ -224,3 +239,19 @@ export {
   type RetryDecision,
   type TickOutcome,
 } from './tick.js';
+
+export {
+  DEFAULT_READ_ONLY_PREFIXES,
+  DEFAULT_NETWORK_PREFIXES,
+  DEFAULT_WORKSPACE_WRITE_PREFIXES,
+  DEFAULT_DENY_PREFIXES,
+  commandTokens,
+  classifyCommand,
+  resolveCommandPolicy,
+  evaluateCommandPolicy,
+  formatPolicyForPrompt,
+  type CommandDecision,
+  type CommandClass,
+  type CommandPolicy,
+  type CommandPolicyResult,
+} from './command_policy.js';

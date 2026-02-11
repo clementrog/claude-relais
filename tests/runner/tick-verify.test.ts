@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runTick } from '@/runner/tick.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Mock dependencies
 vi.mock('@/lib/lock.js', () => ({
@@ -100,7 +100,7 @@ const mockRunBuilder = vi.mocked(runBuilder);
 const mockRollbackToCommit = vi.mocked(rollbackToCommit);
 const mockSpawn = vi.mocked(spawn);
 
-const createMockConfig = (): RelaisConfig => ({
+const createMockConfig = (): EnvoiConfig => ({
   v: 2,
   workspace_dir: '/tmp/test-workspace',
   runner: {
@@ -172,7 +172,7 @@ const createMockConfig = (): RelaisConfig => ({
     max_consecutive_failures: 3,
   },
   history: { enabled: true, retention_count: 50, dir: 'relais/history' },
-} as RelaisConfig);
+} as EnvoiConfig);
 
 const mockTask = {
   task_id: 'test-task',

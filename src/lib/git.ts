@@ -131,7 +131,7 @@ export function parseGitStatusWithExclusions(
  *
  * @example
  * ```typescript
- * const result = isWorktreeCleanExcluding(['relais/**', 'pilot/**']);
+ * const result = isWorktreeCleanExcluding(['envoi/**', 'relais/**']);
  * if (!result.clean) {
  *   console.error('Dirty files:', result.dirtyFiles);
  * }
@@ -270,27 +270,52 @@ export function getCurrentBranch(): string {
 }
 
 /**
- * Stashes pilot/ directory files to prevent merge conflicts.
+ * Gets the top-level directory of the git repository.
  *
- * Creates a stash containing only files in the pilot/ directory.
- * This allows safe merging without losing pilot state.
+ * @returns The absolute path to the git repository root, or null if not in a git repo
+ *
+ * @example
+ * ```typescript
+ * const root = getGitTopLevel();
+ * if (root) {
+ *   console.log(`Git root: ${root}`);
+ * }
+ * ```
+ */
+export function getGitTopLevel(): string | null {
+  try {
+    const topLevel = execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return topLevel.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stashes relais/ directory files to prevent merge conflicts.
+ *
+ * Creates a stash containing only files in the relais/ directory.
+ * This allows safe merging without losing runner state.
  *
  * @returns The stash reference (e.g., "stash@{0}")
  * @throws {Error} If the stash operation fails
  *
  * @example
  * ```typescript
- * const stashRef = stashPilotFiles();
+ * const stashRef = stashRelaisFiles();
  * // Perform merge...
- * popPilotStash(stashRef);
+ * popRelaisStash(stashRef);
  * ```
  */
-export function stashPilotFiles(): string {
+export function stashRelaisFiles(): string {
   try {
-    // Stash only pilot/ directory files
-    // --keep-index keeps staged changes, but we want to stash everything in pilot/
-    // Using git stash push with pathspec to stash only pilot/ files
-    const output = execSync('git stash push -m "relais: auto-stash pilot files" -- pilot/', {
+    // Stash only relais/ directory files
+    // --keep-index keeps staged changes, but we want to stash everything in relais/
+    // Using git stash push with pathspec to stash only runner files
+    execSync('git stash push -m "relais: auto-stash runner files" -- relais/', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -298,7 +323,7 @@ export function stashPilotFiles(): string {
     // Extract stash reference from output
     // Output format: "Saved working directory and index state On <branch>: <message>"
     // We need to get the stash ref, which is typically "stash@{0}" for the most recent stash
-    const stashRef = execSync('git rev-parse --short stash@{0}', {
+    execSync('git rev-parse --short stash@{0}', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
@@ -316,28 +341,28 @@ export function stashPilotFiles(): string {
       return 'stash@{0}';
     } catch {
       throw new Error(
-        `Failed to stash pilot files: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to stash relais files: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 }
 
 /**
- * Pops a previously created stash to restore pilot files.
+ * Pops a previously created stash to restore relais files.
  *
- * Restores the stashed pilot/ directory files back to the working tree.
+ * Restores the stashed relais/ directory files back to the working tree.
  *
- * @param stashRef - The stash reference returned by stashPilotFiles (e.g., "stash@{0}")
+ * @param stashRef - The stash reference returned by stashRelaisFiles (e.g., "stash@{0}")
  * @throws {Error} If the stash pop operation fails
  *
  * @example
  * ```typescript
- * const stashRef = stashPilotFiles();
+ * const stashRef = stashRelaisFiles();
  * // Perform merge...
- * popPilotStash(stashRef);
+ * popRelaisStash(stashRef);
  * ```
  */
-export function popPilotStash(stashRef: string): void {
+export function popRelaisStash(stashRef: string): void {
   try {
     execSync(`git stash pop ${stashRef}`, {
       encoding: 'utf-8',
@@ -345,7 +370,17 @@ export function popPilotStash(stashRef: string): void {
     });
   } catch (error) {
     throw new Error(
-      `Failed to pop pilot stash ${stashRef}: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to pop relais stash ${stashRef}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
+
+/**
+ * @deprecated Use stashRelaisFiles().
+ */
+export const stashPilotFiles = stashRelaisFiles;
+
+/**
+ * @deprecated Use popRelaisStash().
+ */
+export const popPilotStash = popRelaisStash;

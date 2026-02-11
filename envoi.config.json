@@ -1,0 +1,242 @@
+{
+  "version": "1.0",
+  "product_name": "envoi",
+  "workspace_dir": "envoi",
+  "runner": {
+    "require_git": true,
+    "max_tick_seconds": 900,
+    "default_loop_mode": "milestone",
+    "lockfile": "envoi/lock.json",
+    "runner_owned_globs": [
+      "envoi/STATE.json",
+      "envoi/TASK.json",
+      "envoi/REPORT.json",
+      "envoi/REPORT.md",
+      "envoi/BLOCKED.json",
+      "envoi/FACTS.md",
+      "envoi/PRD.md",
+      "envoi/history/**",
+      "envoi/lock.json",
+      "envoi/schemas/**",
+      "envoi/prompts/**"
+    ],
+    "crash_cleanup": {
+      "delete_tmp_glob": "envoi/*.tmp",
+      "validate_runner_json_files": true
+    },
+    "render_report_md": {
+      "enabled": true,
+      "max_chars": 6000
+    },
+    "autonomy": {
+      "profile": "fast",
+      "command_trust": [],
+      "allow_prefixes": [
+        "git status",
+        "git log",
+        "git diff",
+        "git show",
+        "git rev-parse",
+        "git branch --show-current",
+        "ls",
+        "cat",
+        "rg",
+        "find",
+        "wc",
+        "head",
+        "tail",
+        "pwd",
+        "date"
+      ],
+      "deny_prefixes": [
+        "rm",
+        "sudo rm",
+        "git reset --hard",
+        "git checkout --",
+        "git clean -fd",
+        "git clean -fdx",
+        "mkfs",
+        "dd"
+      ],
+      "allow_network_prefixes": [
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "gh"
+      ],
+      "allow_workspace_write_prefixes": [
+        "pnpm test",
+        "pnpm build",
+        "pnpm typecheck",
+        "npm test",
+        "npm run build",
+        "git add",
+        "git commit",
+        "git switch",
+        "git checkout -b"
+      ],
+      "require_explicit_for_destructive": true,
+      "audit_log": {
+        "enabled": true,
+        "path": "envoi/history/autonomy.log"
+      },
+      "fs_policy": "workspace_write",
+      "network_policy": "deny"
+    }
+  },
+  "claude_code_cli": {
+    "command": "claude",
+    "output_format": "json",
+    "no_session_persistence": true
+  },
+  "models": {
+    "orchestrator_provider": "claude_code",
+    "orchestrator_model": "opus",
+    "orchestrator_fallback_model": "sonnet",
+    "builder_model": "sonnet",
+    "builder_fallback_model": "haiku"
+  },
+  "orchestrator": {
+    "max_turns": 3,
+    "permission_mode": "plan",
+    "allowed_tools": "Read,Glob,Grep",
+    "system_prompt_file": "envoi/prompts/orchestrator.system.txt",
+    "user_prompt_file": "envoi/prompts/orchestrator.user.txt",
+    "task_schema_file": "envoi/schemas/task.schema.json",
+    "max_parse_retries_per_tick": 1,
+    "max_budget_usd": 0.4
+  },
+  "builder": {
+    "default_mode": "cursor",
+    "allow_patch_mode": true,
+    "claude_code": {
+      "max_turns": 8,
+      "permission_mode": "bypassPermissions",
+      "allowed_tools": "Read,Edit,Glob,Grep,Bash",
+      "system_prompt_file": "envoi/prompts/builder.system.txt",
+      "user_prompt_file": "envoi/prompts/builder.user.txt",
+      "builder_result_schema_file": "envoi/schemas/builder_result.schema.json",
+      "max_budget_usd": 1.5,
+      "strict_builder_json": false
+    },
+    "patch": {
+      "max_patch_attempts_per_milestone": 10
+    },
+    "cursor": {
+      "driver_kind": "cursor_agent",
+      "command": "cursor",
+      "args": [
+        "agent",
+        "--print",
+        "--output-format",
+        "text",
+        "--workspace",
+        ".",
+        "--force"
+      ],
+      "timeout_seconds": 300,
+      "output_file": "BUILDER_RESULT.json"
+    }
+  },
+  "scope": {
+    "default_allowed_globs": [
+      "src/**",
+      "app/**",
+      "packages/**",
+      "tests/**",
+      "README.md"
+    ],
+    "default_forbidden_globs": [
+      ".git/**",
+      "envoi/**",
+      "**/.env*",
+      "**/*secret*",
+      "**/*token*",
+      "**/node_modules/**"
+    ],
+    "default_allow_new_files": false,
+    "default_allow_lockfile_changes": false,
+    "lockfiles": [
+      "pnpm-lock.yaml",
+      "package-lock.json",
+      "yarn.lock",
+      "bun.lockb"
+    ]
+  },
+  "diff_limits": {
+    "default_max_files_touched": 12,
+    "default_max_lines_changed": 400
+  },
+  "verification": {
+    "execution_mode": "argv_no_shell",
+    "max_param_len": 128,
+    "reject_whitespace_in_params": true,
+    "reject_dotdot": true,
+    "reject_metachars_regex": "[;&|$\\\\><(){}\\[\\]`\\n\\r\\t\\0]",
+    "timeout_fast_seconds": 90,
+    "timeout_slow_seconds": 600,
+    "templates": [
+      {
+        "id": "lint",
+        "cmd": "pnpm",
+        "args": [
+          "lint"
+        ]
+      },
+      {
+        "id": "typecheck",
+        "cmd": "pnpm",
+        "args": [
+          "typecheck"
+        ]
+      },
+      {
+        "id": "test",
+        "cmd": "pnpm",
+        "args": [
+          "test"
+        ]
+      },
+      {
+        "id": "test_filter",
+        "cmd": "pnpm",
+        "args": [
+          "test",
+          "--filter",
+          "{{pkg}}"
+        ],
+        "params": {
+          "pkg": {
+            "kind": "string_token"
+          }
+        }
+      }
+    ]
+  },
+  "budgets": {
+    "per_milestone": {
+      "max_ticks": 200,
+      "max_orchestrator_calls": 260,
+      "max_builder_calls": 200,
+      "max_verify_runs": 600,
+      "max_estimated_cost_usd": 80
+    },
+    "warn_at_fraction": 0.8
+  },
+  "history": {
+    "enabled": true,
+    "dir": "history",
+    "max_mb": 500,
+    "include_diff_patch": true,
+    "include_verify_log": true
+  },
+  "git": {
+    "branching": {
+      "mode": "off",
+      "name_template": "envoi/{{task_id}}",
+      "base_ref": "HEAD",
+      "n_tasks": 5
+    }
+  }
+}

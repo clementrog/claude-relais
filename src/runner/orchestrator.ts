@@ -9,12 +9,18 @@ import { readFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { invokeClaudeCode } from '../lib/claude.js';
+import { invokeReviewer } from '../lib/reviewer.js';
 import { loadSchema, validateWithSchema, type RawAjvError } from '../lib/schema.js';
 import { readWorkspaceState } from '../lib/workspace_state.js';
-import type { RelaisConfig } from '../types/config.js';
+import { truncatePromptSection } from '../lib/prompt_budget.js';
+import { resolveOrchestratorPermissionMode } from '../lib/autonomy.js';
+import { formatPolicyForPrompt } from '../lib/command_policy.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { TickState } from '../types/state.js';
 import type { Task } from '../types/task.js';
-import { isInterruptedError } from '../types/claude.js';
+import { isInterruptedError, isTimeoutError } from '../types/claude.js';
+import type { ClaudeTokenUsage } from '../types/claude.js';
+import { resolveInWorkspace } from '../lib/paths.js';
 
 /**
  * Diagnostics for orchestrator failures.
@@ -38,33 +44,161 @@ export interface OrchestratorResult {
   task: Task | null;
   /** Error message (null if successful) */
   error: string | null;
-  /** Raw response from Claude Code */
+  /** Raw model output from Claude Code (the CLI wrapper's `.result` field). */
   rawResponse: string;
   /** Raw stderr from Claude Code */
   rawStderr: string;
+  /** Raw CLI wrapper JSON (stringified) for debugging when `.result` is missing/empty. */
+  rawCliStdout?: string;
   /** Number of orchestrator calls made (1 or 2) */
   attempts: number;
   /** The error that triggered retry (null if no retry or successful) */
   retryReason: string | null;
   /** Diagnostics for debugging failures */
   diagnostics?: OrchestratorDiagnosticsResult;
+  /** Optional token usage telemetry from CLI output */
+  tokenUsage?: ClaudeTokenUsage | null;
+}
+
+const ORCHESTRATOR_PROMPT_CAPS = {
+  gitStatusChars: 2000,
+  factsChars: 7000,
+  prdChars: 14000,
+  roadmapChars: 8000,
+  lastReportChars: 6000,
+  pendingIdeasChars: 3000,
+  planningDigestChars: 2000,
+  openQuestionsChars: 2500,
+} as const;
+
+function safeStringifyCliJson(raw: unknown): string {
+  if (typeof raw !== 'object' || raw === null) return '';
+  try {
+    return JSON.stringify(raw, null, 2);
+  } catch {
+    return '';
+  }
+}
+
+interface PlannerInvocationResult {
+  success: boolean;
+  rawResponse: string;
+  rawStderr: string;
+  rawCliStdout?: string;
+  parsedObject?: unknown;
+  tokenUsage?: ClaudeTokenUsage | null;
+  error?: string;
+}
+
+async function invokePlanner(
+  config: EnvoiConfig,
+  provider: 'claude_code' | 'chatgpt',
+  model: string,
+  userPrompt: string,
+  systemPrompt: string,
+  timeout: number,
+  signal?: AbortSignal
+): Promise<PlannerInvocationResult> {
+  if (provider === 'chatgpt') {
+    const response = await invokeReviewer(
+      {
+        command: 'codex',
+        model,
+        maxTurns: config.orchestrator.max_turns,
+        timeout,
+      },
+      {
+        prompt: userPrompt,
+        systemPrompt,
+      }
+    );
+    if (!response.success) {
+      return {
+        success: false,
+        rawResponse: '',
+        rawStderr: response.stderr ?? '',
+        error: response.error,
+      };
+    }
+    const rawCliStdout = safeStringifyCliJson((response as any).raw);
+    return {
+      success: true,
+      rawResponse: rawCliStdout || JSON.stringify(response.result),
+      rawStderr: '',
+      rawCliStdout: rawCliStdout || undefined,
+      parsedObject: response.result,
+      tokenUsage: null,
+    };
+  }
+
+  const response = await invokeClaudeCode(config.claude_code_cli, {
+    prompt: userPrompt,
+    maxTurns: config.orchestrator.max_turns,
+    permissionMode: resolveOrchestratorPermissionMode(config),
+    model,
+    systemPrompt,
+    timeout,
+    signal,
+  });
+  const rawObj: unknown = (response as any).raw;
+  const rawCliStdout = safeStringifyCliJson(rawObj);
+  const cliSubtype =
+    typeof (rawObj as any)?.subtype === 'string' ? String((rawObj as any).subtype) : null;
+  const hasResultField = Object.prototype.hasOwnProperty.call((rawObj as any) ?? {}, 'result');
+  const modelOutput = response.result ?? '';
+
+  if (!response.success) {
+    return {
+      success: false,
+      rawResponse: modelOutput,
+      rawStderr: response.stderr,
+      rawCliStdout: rawCliStdout || undefined,
+      tokenUsage: response.tokenUsage ?? null,
+      error:
+        `Claude Code invocation failed (exit code ${response.exitCode})` +
+        (cliSubtype ? `, subtype=${cliSubtype}` : '') +
+        (!hasResultField ? ', missing result field' : ''),
+    };
+  }
+
+  if (modelOutput.trim().length === 0) {
+    return {
+      success: false,
+      rawResponse: modelOutput,
+      rawStderr: response.stderr,
+      rawCliStdout: rawCliStdout || undefined,
+      tokenUsage: response.tokenUsage ?? null,
+      error:
+        `Claude Code returned empty output (exit code ${response.exitCode})` +
+        (cliSubtype ? `, subtype=${cliSubtype}` : '') +
+        (!hasResultField ? ', missing result field' : ''),
+    };
+  }
+
+  return {
+    success: true,
+    rawResponse: modelOutput,
+    rawStderr: response.stderr,
+    rawCliStdout: rawCliStdout || undefined,
+    tokenUsage: response.tokenUsage ?? null,
+  };
 }
 
 /**
  * Builds the orchestrator user prompt by loading the template and interpolating placeholders.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param state - Current tick state
  * @param retryReason - Optional error reason for retry attempts
  * @returns The interpolated user prompt
  */
 export async function buildOrchestratorPrompt(
-  config: RelaisConfig,
+  config: EnvoiConfig,
   state: TickState,
   retryReason?: string | null
 ): Promise<string> {
   const workspaceDir = config.workspace_dir;
-  const userPromptPath = join(workspaceDir, config.orchestrator.user_prompt_file);
+  const userPromptPath = resolveInWorkspace(workspaceDir, config.orchestrator.user_prompt_file);
 
   // Load user prompt template
   let template: string;
@@ -81,31 +215,80 @@ export async function buildOrchestratorPrompt(
   try {
     gitStatus = execSync('git status --porcelain', {
       encoding: 'utf-8',
-      maxBuffer: 10000,
+      maxBuffer: 50000,
       cwd: workspaceDir,
     }).trim();
   } catch {
     gitStatus = '(git status unavailable)';
   }
+  gitStatus = truncatePromptSection('REPO_SUMMARY', gitStatus, ORCHESTRATOR_PROMPT_CAPS.gitStatusChars).text;
 
   // Read FACTS.md if exists
-  const factsPath = join(workspaceDir, 'relais/FACTS.md');
-  const facts = existsSync(factsPath) ? readFileSync(factsPath, 'utf-8') : '';
+  const factsPath = resolveInWorkspace(workspaceDir, 'FACTS.md');
+  const factsRaw = existsSync(factsPath) ? readFileSync(factsPath, 'utf-8') : '';
+  const facts = truncatePromptSection('FACTS_MD', factsRaw, ORCHESTRATOR_PROMPT_CAPS.factsChars).text;
+
+  // Read PRD.md if exists
+  const prdPath = resolveInWorkspace(workspaceDir, 'PRD.md');
+  const prdRaw = existsSync(prdPath) ? readFileSync(prdPath, 'utf-8') : '';
+  const prd = truncatePromptSection('PRD_MD', prdRaw, ORCHESTRATOR_PROMPT_CAPS.prdChars).text;
+
+  // Read ROADMAP.json if exists
+  const roadmapPath = resolveInWorkspace(workspaceDir, 'ROADMAP.json');
+  const roadmapRaw = existsSync(roadmapPath) ? readFileSync(roadmapPath, 'utf-8') : '';
+  const roadmap = truncatePromptSection('ROADMAP_JSON', roadmapRaw, ORCHESTRATOR_PROMPT_CAPS.roadmapChars).text;
 
   // Read REPORT.md if exists (last report)
   const reportPath = join(workspaceDir, 'REPORT.md');
-  const lastReport = existsSync(reportPath) ? readFileSync(reportPath, 'utf-8') : '';
+  const lastReportRaw = existsSync(reportPath) ? readFileSync(reportPath, 'utf-8') : '';
+  const lastReport = truncatePromptSection(
+    'LAST_REPORT_MD',
+    lastReportRaw,
+    ORCHESTRATOR_PROMPT_CAPS.lastReportChars
+  ).text;
 
-  // Read STATE.json for milestone and budget summary
+  // Read STATE.json for milestone, budget summary, and planning context
   let milestoneId = 'none';
   let budgetSummary = 'Budgets: (unavailable)';
+  let pendingIdeasContext = '[]';
+  let planningDigestContext = '{}';
+  let openQuestionsContext = '[]';
   try {
     const wsState = await readWorkspaceState(workspaceDir);
     milestoneId = wsState.milestone_id || 'none';
     budgetSummary = `Milestone: ${milestoneId}, Ticks: ${wsState.budgets.ticks}, Orchestrator: ${wsState.budgets.orchestrator_calls}, Builder: ${wsState.budgets.builder_calls}, Verify: ${wsState.budgets.verify_runs}`;
+
+    const pendingIdeas = (wsState.idea_inbox ?? [])
+      .filter((idea) => idea.status === 'new' || idea.status === 'triaged')
+      .slice(-12);
+    pendingIdeasContext = truncatePromptSection(
+      'PENDING_IDEAS',
+      JSON.stringify(pendingIdeas),
+      ORCHESTRATOR_PROMPT_CAPS.pendingIdeasChars
+    ).text;
+
+    const planningDigest = wsState.planning_digest ?? {};
+    planningDigestContext = truncatePromptSection(
+      'PLANNING_DIGEST',
+      JSON.stringify(planningDigest),
+      ORCHESTRATOR_PROMPT_CAPS.planningDigestChars
+    ).text;
+
+    const openQuestions = (wsState.open_product_questions ?? [])
+      .filter((question) => !question.resolved)
+      .slice(-8);
+    openQuestionsContext = truncatePromptSection(
+      'OPEN_PRODUCT_QUESTIONS',
+      JSON.stringify(openQuestions),
+      ORCHESTRATOR_PROMPT_CAPS.openQuestionsChars
+    ).text;
   } catch {
     // STATE.json may not exist yet
   }
+
+  // Determine builder capabilities
+  const builderDefaultMode = config.builder.default_mode;
+  const cursorConfigured = config.builder.cursor !== undefined && config.builder.cursor !== null ? 'yes' : 'no';
 
   // Interpolate placeholders with real values
   const replacements: Record<string, string> = {
@@ -115,13 +298,28 @@ export async function buildOrchestratorPrompt(
     '{{VERIFY_TEMPLATE_IDS}}': config.verification.templates.map((t) => t.id).join(', ') || '[No templates]',
     '{{REPO_SUMMARY}}': gitStatus || '(clean)',
     '{{FACTS_MD}}': facts,
+    '{{PRD_MD}}': prd || '[No PRD provided yet]',
+    '{{ROADMAP_JSON}}': roadmap || '{}',
     '{{LAST_REPORT_MD}}': lastReport,
     '{{BLOCKED_JSON_OR_EMPTY}}': '',
+    '{{PENDING_IDEAS_JSON}}': pendingIdeasContext,
+    '{{PLANNING_DIGEST_JSON}}': planningDigestContext,
+    '{{OPEN_PRODUCT_QUESTIONS_JSON}}': openQuestionsContext,
+    '{{BUILDER_DEFAULT_MODE}}': builderDefaultMode,
+    '{{BUILDER_CURSOR_CONFIGURED}}': cursorConfigured,
+    '{{AUTONOMY_POLICY}}': formatPolicyForPrompt(config),
   };
 
   let prompt = template;
+  const templateHasRoadmapPlaceholder = template.includes('{{ROADMAP_JSON}}');
   for (const [placeholder, value] of Object.entries(replacements)) {
     prompt = prompt.replace(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g'), value);
+  }
+  if (!templateHasRoadmapPlaceholder) {
+    prompt += `\n- roadmap_json: ${roadmap || '{}'}`;
+  }
+  if (!template.includes('{{AUTONOMY_POLICY}}')) {
+    prompt += `\n- autonomy_policy:\n${replacements['{{AUTONOMY_POLICY}}']}`;
   }
 
   // Append retry reason if this is a retry attempt
@@ -153,25 +351,26 @@ export async function runOrchestrator(
   const workspaceDir = config.workspace_dir;
 
   // Load system prompt
-  const systemPromptPath = join(workspaceDir, config.orchestrator.system_prompt_file);
+  const systemPromptPath = resolveInWorkspace(workspaceDir, config.orchestrator.system_prompt_file);
   let systemPrompt: string;
   try {
     systemPrompt = await readFile(systemPromptPath, 'utf-8');
   } catch (error) {
-    return {
-      success: false,
-      task: null,
-      error: `Failed to read orchestrator system prompt from ${systemPromptPath}: ${error instanceof Error ? error.message : String(error)}`,
-      rawResponse: '',
-      rawStderr: '',
-      attempts: 0,
-      retryReason: null,
-    };
+      return {
+        success: false,
+        task: null,
+        error: `Failed to read orchestrator system prompt from ${systemPromptPath}: ${error instanceof Error ? error.message : String(error)}`,
+        rawResponse: '',
+        rawStderr: '',
+        attempts: 0,
+        retryReason: null,
+        tokenUsage: null,
+      };
   }
 
   // Load task schema (cache after first load)
   if (taskSchemaCache === null) {
-    const schemaPath = join(workspaceDir, config.orchestrator.task_schema_file);
+    const schemaPath = resolveInWorkspace(workspaceDir, config.orchestrator.task_schema_file);
     try {
       taskSchemaCache = await loadSchema(schemaPath);
     } catch (error) {
@@ -183,12 +382,14 @@ export async function runOrchestrator(
         rawStderr: '',
         attempts: 0,
         retryReason: null,
+        tokenUsage: null,
       };
     }
   }
 
+  const provider = (config.models.orchestrator_provider === 'chatgpt' ? 'chatgpt' : 'claude_code');
   const model = config.models.orchestrator_model;
-  const timeout = config.runner.max_tick_seconds * 1000; // Convert to milliseconds
+  const timeout = (config.orchestrator.timeout_seconds ?? config.runner.max_tick_seconds) * 1000; // Convert to milliseconds
 
   // First attempt
   let retryReason: string | null = null;
@@ -210,41 +411,47 @@ export async function runOrchestrator(
         rawStderr: '',
         attempts,
         retryReason,
+        tokenUsage: null,
       };
     }
 
     try {
-      const response = await invokeClaudeCode(config.claude_code_cli, {
-        prompt: userPrompt,
-        maxTurns: config.orchestrator.max_turns,
-        permissionMode: config.orchestrator.permission_mode as 'plan' | 'bypassPermissions',
+      const invocation = await invokePlanner(
+        config,
+        provider,
         model,
+        userPrompt,
         systemPrompt,
         timeout,
-        signal,
-      });
-
-      if (!response.success || !response.result) {
-        // Non-retryable error (invocation failure)
+        signal
+      );
+      const modelOutput = invocation.rawResponse ?? '';
+      if (!invocation.success) {
         return {
           success: false,
           task: null,
-          error: `Claude Code invocation failed with exit code ${response.exitCode}`,
-          rawResponse: response.result || '',
-          rawStderr: response.stderr,
+          error: invocation.error ?? 'Planner invocation failed',
+          rawResponse: modelOutput,
+          rawStderr: invocation.rawStderr,
+          rawCliStdout: invocation.rawCliStdout,
           attempts,
           retryReason,
+          tokenUsage: invocation.tokenUsage ?? null,
         };
       }
 
       // Parse JSON response
       let parsed: unknown;
       try {
-        const raw = response.result.trim();
-        const unfenced = raw.startsWith("```")
-          ? raw.replace(/^```[a-zA-Z0-9_-]*\s*\n?/, "").replace(/```[\s]*$/, "").trim()
-          : raw;
-        parsed = JSON.parse(unfenced);
+        if (invocation.parsedObject !== undefined) {
+          parsed = invocation.parsedObject;
+        } else {
+          const raw = modelOutput.trim();
+          const unfenced = raw.startsWith("```")
+            ? raw.replace(/^```[a-zA-Z0-9_-]*\s*\n?/, "").replace(/```[\s]*$/, "").trim()
+            : raw;
+          parsed = JSON.parse(unfenced);
+        }
       } catch (error) {
         // JSON parse error - retryable
         retryReason = `Failed to parse orchestrator output as JSON: ${error instanceof Error ? error.message : String(error)}`;
@@ -258,13 +465,15 @@ export async function runOrchestrator(
             success: false,
             task: null,
             error: retryReason,
-            rawResponse: response.result,
-            rawStderr: response.stderr,
+            rawResponse: modelOutput,
+            rawStderr: invocation.rawStderr,
+            rawCliStdout: invocation.rawCliStdout,
             attempts,
             retryReason,
             diagnostics: {
               extractMethod: 'direct_parse',
             },
+            tokenUsage: invocation.tokenUsage ?? null,
           };
         }
       }
@@ -287,8 +496,9 @@ export async function runOrchestrator(
             success: false,
             task: null,
             error: retryReason,
-            rawResponse: response.result,
-            rawStderr: response.stderr,
+            rawResponse: modelOutput,
+            rawStderr: invocation.rawStderr,
+            rawCliStdout: invocation.rawCliStdout,
             attempts,
             retryReason,
             diagnostics: {
@@ -296,6 +506,7 @@ export async function runOrchestrator(
               extractMethod: 'direct_parse',
               extractedJson: parsed,
             },
+            tokenUsage: invocation.tokenUsage ?? null,
           };
         }
       }
@@ -305,25 +516,32 @@ export async function runOrchestrator(
         success: true,
         task: validationResult.data!,
         error: null,
-        rawResponse: response.result,
-        rawStderr: response.stderr,
+        rawResponse: modelOutput,
+        rawStderr: invocation.rawStderr,
+        rawCliStdout: invocation.rawCliStdout,
         attempts,
         retryReason: attempt === 1 ? retryReason : null,
+        tokenUsage: invocation.tokenUsage ?? null,
       };
     } catch (error) {
       // Re-throw InterruptedError to propagate to tick level
       if (isInterruptedError(error)) {
         throw error;
       }
+      // Re-throw timeout errors to propagate to tick level for proper STOP_ORCHESTRATOR_TIMEOUT handling
+      if (isTimeoutError(error)) {
+        throw error;
+      }
       // Non-retryable error (invocation exception)
       return {
         success: false,
         task: null,
-        error: `Claude Code invocation error: ${error instanceof Error ? error.message : String(error)}`,
+        error: `Planner invocation error: ${error instanceof Error ? error.message : String(error)}`,
         rawResponse: '',
         rawStderr: '',
         attempts,
         retryReason,
+        tokenUsage: null,
       };
     }
   }
@@ -337,5 +555,6 @@ export async function runOrchestrator(
     rawStderr: '',
     attempts,
     retryReason,
+    tokenUsage: null,
   };
 }

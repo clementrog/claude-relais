@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runTick } from '@/runner/tick.js';
 import { InterruptedError } from '@/types/claude.js';
-import type { RelaisConfig } from '@/types/config.js';
+import type { EnvoiConfig } from '@/types/config.js';
 
 // Mock invokeClaudeCode to throw InterruptedError when signal is aborted
 vi.mock('@/lib/claude.js', () => ({
@@ -105,7 +105,7 @@ vi.mock('@/lib/blocked.js', () => ({
   deleteBlocked: vi.fn().mockResolvedValue(undefined),
 }));
 
-function createMockConfig(workspaceDir: string): RelaisConfig {
+function createMockConfig(workspaceDir: string): EnvoiConfig {
   return {
     version: '1.0',
     product_name: 'test-sigint',
@@ -194,7 +194,7 @@ function createMockConfig(workspaceDir: string): RelaisConfig {
       include_diff_patch: false,
       include_verify_log: false,
     },
-  } as RelaisConfig;
+  } as EnvoiConfig;
 }
 
 describe('SIGINT artifact persistence', () => {

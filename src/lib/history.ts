@@ -7,20 +7,22 @@
 
 import { mkdir, readdir, open, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { RelaisConfig } from '../types/config.js';
+import type { EnvoiConfig } from '../types/config.js';
 import type { ReportData, Verdict, ReportCode } from '../types/report.js';
 import { atomicWriteJson, AtomicFsError } from './fs.js';
 import type { RawAjvError } from './schema.js';
+import { resolveInWorkspace } from './paths.js';
 
 /**
  * Gets the full path to the history directory for a specific run.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @param runId - Run ID
  * @returns Full path to the run's history directory
  */
-function getHistoryRunPath(config: RelaisConfig, runId: string): string {
-  return join(config.workspace_dir, config.history.dir, runId);
+function getHistoryRunPath(config: EnvoiConfig, runId: string): string {
+  const historyDir = resolveInWorkspace(config.workspace_dir, config.history.dir);
+  return join(historyDir, runId);
 }
 
 /**
@@ -83,11 +85,11 @@ async function atomicWriteText(filePath: string, content: string): Promise<void>
  * Creates the history snapshot directory for a run.
  *
  * @param runId - Run ID
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves when directory is created
  * @throws {Error} If directory creation fails
  */
-export async function createHistorySnapshot(runId: string, config: RelaisConfig): Promise<void> {
+export async function createHistorySnapshot(runId: string, config: EnvoiConfig): Promise<void> {
   const runPath = getHistoryRunPath(config, runId);
   await mkdir(runPath, { recursive: true });
 }
@@ -98,7 +100,7 @@ export async function createHistorySnapshot(runId: string, config: RelaisConfig)
  * @param runId - Run ID
  * @param filename - Name of the artifact file (e.g., 'report.json', 'diff.patch')
  * @param content - Content to write (string for text files, object for JSON)
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves when write completes
  * @throws {Error} If the write operation fails
  */
@@ -106,7 +108,7 @@ export async function writeHistoryArtifact(
   runId: string,
   filename: string,
   content: string | object,
-  config: RelaisConfig
+  config: EnvoiConfig
 ): Promise<void> {
   const runPath = getHistoryRunPath(config, runId);
   const filePath = join(runPath, filename);
@@ -139,7 +141,7 @@ interface HistoryMeta {
  * @param markdown - Markdown rendering of the report
  * @param diffPatch - Optional diff patch content
  * @param verifyLog - Optional verification log content
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves when all artifacts are saved
  * @throws {Error} If any write operation fails
  */
@@ -149,7 +151,7 @@ export async function snapshotRun(
   markdown: string,
   diffPatch: string | null,
   verifyLog: string | null,
-  config: RelaisConfig
+  config: EnvoiConfig
 ): Promise<void> {
   // Create the history directory
   await createHistorySnapshot(runId, config);
@@ -183,7 +185,7 @@ export async function snapshotRun(
 /**
  * Counts the number of existing history entries.
  *
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves to the count of history entries
  * @throws {Error} If reading the history directory fails
  */
@@ -209,7 +211,7 @@ export interface BuilderErrorInfo {
  * @param stdout - Raw stdout from builder invocation
  * @param stderr - Raw stderr from builder invocation (may be null)
  * @param errorInfo - Structured error information
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves when all artifacts are saved
  * @throws {Error} If any write operation fails
  */
@@ -218,7 +220,7 @@ export async function persistBuilderFailure(
   stdout: string,
   stderr: string | null,
   errorInfo: BuilderErrorInfo,
-  config: RelaisConfig
+  config: EnvoiConfig
 ): Promise<void> {
   // Ensure history directory exists
   await createHistorySnapshot(runId, config);
@@ -274,7 +276,7 @@ export interface OrchestratorFailureMeta {
  * @param extractedJson - Extracted JSON candidate if extraction succeeded
  * @param schemaErrors - Ajv errors array when validation fails
  * @param meta - Invocation metadata
- * @param config - Relais configuration
+ * @param config - Envoi configuration
  * @returns Promise that resolves when all artifacts are saved
  * @throws {Error} If any write operation fails
  */
@@ -285,7 +287,7 @@ export async function persistOrchestratorFailure(
   extractedJson: unknown | null,
   schemaErrors: RawAjvError[] | null,
   meta: OrchestratorFailureMeta,
-  config: RelaisConfig
+  config: EnvoiConfig
 ): Promise<void> {
   // Create orchestrator subdirectory under run history
   const orchestratorPath = join(config.workspace_dir, config.history.dir, runId, 'orchestrator');
@@ -321,8 +323,8 @@ export async function persistOrchestratorFailure(
   await writeArtifact('meta.json', meta);
 }
 
-export async function getHistoryCount(config: RelaisConfig): Promise<number> {
-  const historyPath = join(config.workspace_dir, config.history.dir);
+export async function getHistoryCount(config: EnvoiConfig): Promise<number> {
+  const historyPath = resolveInWorkspace(config.workspace_dir, config.history.dir);
 
   try {
     const entries = await readdir(historyPath, { withFileTypes: true });
