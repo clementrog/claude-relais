@@ -16,19 +16,19 @@ Use this skill when the user wants deterministic orchestration with strong guard
 
 ## Required contracts
 
-- `pilot/STATE.json`
-- `pilot/TASK.json`
-- `pilot/REPORT.json`
+- `relais/STATE.json`
+- `relais/TASK.json`
+- `relais/REPORT.json`
 
 Optional contracts:
 
-- `pilot/ROADMAP.json`
-- `pilot/REVIEW.json`
-- `pilot/DESIGN-CONTRACT.json`
+- `relais/ROADMAP.json`
+- `relais/REVIEW.json`
+- `relais/DESIGN-CONTRACT.json`
 
 ## Workflow
 
-1. Read `pilot/STATE.json` and determine role/phase.
+1. Read `relais/STATE.json` and determine role/phase.
 2. Plan one bounded task with explicit write scope.
 3. Execute build with chosen builder mode.
 4. Judge by git truth + verification outputs.

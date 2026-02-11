@@ -1,13 +1,13 @@
 # Contract Files
 
-## `pilot/STATE.json`
+## `relais/STATE.json`
 Orchestrator-owned runtime state:
 - current phase
 - branch/milestone info
 - attempt count
 - blockers and next step
 
-## `pilot/TASK.json`
+## `relais/TASK.json`
 Orchestrator-owned dispatch contract:
 - goal
 - scope
@@ -15,18 +15,18 @@ Orchestrator-owned dispatch contract:
 - verify commands
 - risk
 
-## `pilot/REPORT.json`
+## `relais/REPORT.json`
 Builder-owned completion claim:
 - status
 - changed files
 - verify output
 - blockers
 
-## `pilot/ROADMAP.json`
+## `relais/ROADMAP.json`
 Optional orchestrator plan for multi-milestone work.
 
-## `pilot/REVIEW.json`
+## `relais/REVIEW.json`
 Optional escalation contract for deep review.
 
-## `pilot/DESIGN-CONTRACT.json`
+## `relais/DESIGN-CONTRACT.json`
 Optional visual/design constraints and references.

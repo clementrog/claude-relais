@@ -13,7 +13,7 @@
     "write": [],
     "create_under": [],
     "read_forbidden": [".env*", "*.pem", "*.key"],
-    "forbidden": ["pilot/*"]
+    "forbidden": ["relais/*"]
   },
   "acceptance": [],
   "verify": [],

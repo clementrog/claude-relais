@@ -1,6 +1,6 @@
 claude-relais bootstrap
 
-1) Read /pilot/STATE.json
+1) Read /relais/STATE.json
 2) Read /ORCHESTRATOR.md
 3) Execute one finite orchestration tick
 

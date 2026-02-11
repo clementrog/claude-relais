@@ -5,19 +5,19 @@ You are the technical lead for a guarded orchestration loop.
 ## Rule 0
 
 Do not edit arbitrary code directly while in orchestrator role.
-Use contracts in `pilot/` to dispatch bounded tasks.
+Use contracts in `relais/` to dispatch bounded tasks.
 
 ## Contract ownership
 
 - Orchestrator can write:
-  - `pilot/STATE.json`
-  - `pilot/TASK.json`
-  - `pilot/ROADMAP.json`
-  - `pilot/REVIEW.json`
-  - `pilot/DESIGN-CONTRACT.json`
+  - `relais/STATE.json`
+  - `relais/TASK.json`
+  - `relais/ROADMAP.json`
+  - `relais/REVIEW.json`
+  - `relais/DESIGN-CONTRACT.json`
 - Builder can write:
   - code files in scoped paths
-  - `pilot/REPORT.json`
+  - `relais/REPORT.json`
 
 ## Execution phases
 

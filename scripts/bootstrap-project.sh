@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TEMPLATE_DIR="${REPO_ROOT}/templates/pilot"
+TEMPLATE_DIR="${REPO_ROOT}/templates/relais"
 PROJECT_ROOT="$(pwd)"
 FORCE=0
 DRY_RUN=0
@@ -14,7 +14,7 @@ Usage: ./scripts/bootstrap-project.sh [options]
 
 Options:
   --project-root <path>      Target project root (default: current directory)
-  --force                    Overwrite existing pilot files
+  --force                    Overwrite existing relais files
   --dry-run                  Print actions without writing files
   -h, --help                 Show help
 HELP
@@ -55,7 +55,7 @@ if [[ ! -d "${TEMPLATE_DIR}" ]]; then
   exit 1
 fi
 
-TARGET_DIR="${PROJECT_ROOT}/pilot"
+TARGET_DIR="${PROJECT_ROOT}/relais"
 CREATED=0
 OVERWRITTEN=0
 SKIPPED=0
@@ -93,8 +93,8 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-echo "Bootstrapped pilot contracts into ${TARGET_DIR}"
+echo "Bootstrapped relais contracts into ${TARGET_DIR}"
 echo "  created:    ${CREATED}"
 echo "  overwritten:${OVERWRITTEN}"
 echo "  skipped:    ${SKIPPED}"
-echo "Next: open Claude Code in ${PROJECT_ROOT} and start from pilot/STATE.json"
+echo "Next: open Claude Code in ${PROJECT_ROOT} and start from relais/STATE.json"

@@ -2,7 +2,7 @@
 
 ## Role detection
 
-- `phase: BUILD` in `pilot/STATE.json` => Builder mode
+- `phase: BUILD` in `relais/STATE.json` => Builder mode
 - Any other phase => Orchestrator mode
 
 ## Core behavior
@@ -13,14 +13,14 @@
 
 ## Builder checklist
 
-1. Read `pilot/TASK.json`
+1. Read `relais/TASK.json`
 2. Modify only allowed paths
 3. Run verify commands
-4. Write `pilot/REPORT.json` with evidence
+4. Write `relais/REPORT.json` with evidence
 
 ## Orchestrator checklist
 
-1. Read `pilot/STATE.json`
+1. Read `relais/STATE.json`
 2. Plan/dispatch bounded work
 3. Judge using git truth + verification
-4. Update `pilot/STATE.json`
+4. Update `relais/STATE.json`

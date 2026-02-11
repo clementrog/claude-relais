@@ -20,7 +20,7 @@ Most agent workflows optimize either speed or safety. `claude-relais` enforces b
 
 ## Architecture
 
-1. **PLAN**: define one bounded task and scope in `pilot/TASK.json`.
+1. **PLAN**: define one bounded task and scope in `relais/TASK.json`.
 2. **BUILD**: execute with selected builder mode.
 3. **JUDGE**: verify scope, diffs, and checks from git truth.
 4. **REPORT**: persist state/report and decide stop/continue.
@@ -52,7 +52,7 @@ Run this from the repository you want Claude to work on:
 /path/to/claude-relais/scripts/bootstrap-project.sh --project-root .
 ```
 
-This creates `pilot/` contracts from templates.
+This creates `relais/` contracts from templates.
 
 ## Verify install
 
@@ -70,7 +70,7 @@ Expected summary lines:
 After bootstrapping your target repo, start Claude Code in that target repo and ask:
 
 ```text
-Use the claude-relais orchestration workflow. Start from pilot/STATE.json, plan one bounded task, dispatch build, then judge with git truth.
+Use the claude-relais orchestration workflow. Start from relais/STATE.json, plan one bounded task, dispatch build, then judge with git truth.
 ```
 
 ## Configuration

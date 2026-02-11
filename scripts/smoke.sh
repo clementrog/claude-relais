@@ -66,7 +66,7 @@ REQUIRED=(
   "references/how-it-works.md"
   "references/contracts.md"
   "scripts/bootstrap-project.sh"
-  "templates/pilot/STATE.json"
+  "templates/relais/STATE.json"
   "config.local.json"
 )
 
