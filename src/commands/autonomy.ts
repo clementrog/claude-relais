@@ -7,6 +7,7 @@ import { CONFIG_FILE_NAME, ConfigError, findConfigFile } from '../lib/config.js'
 import type { EnvoiConfig } from '../types/config.js';
 import { describeAutonomyProfile } from '../lib/autonomy.js';
 import {
+  DEFAULT_DENY_PREFIXES,
   DEFAULT_NETWORK_PREFIXES,
   DEFAULT_READ_ONLY_PREFIXES,
   DEFAULT_WORKSPACE_WRITE_PREFIXES,
@@ -109,7 +110,7 @@ export async function autonomyCommand(options: {
       allow_prefixes: trustMutated
         ? nextAllowPrefixes
         : (existingAutonomy?.allow_prefixes ?? DEFAULT_READ_ONLY_PREFIXES),
-      deny_prefixes: existingAutonomy?.deny_prefixes ?? [],
+      deny_prefixes: existingAutonomy?.deny_prefixes ?? DEFAULT_DENY_PREFIXES,
       allow_network_prefixes:
         existingAutonomy?.allow_network_prefixes ??
         (selected === 'fast' ? DEFAULT_NETWORK_PREFIXES : []),

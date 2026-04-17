@@ -16,6 +16,10 @@ import { CLI_NAME, WORKSPACE_DIR_NAME } from '../lib/branding.js';
 
 type BuilderChoice = 'cursor';
 
+function normalizeCursorCliArgs(args: string[]): string[] {
+  return args.map((arg) => (arg === '--prompt' || arg.startsWith('--prompt=') ? '--print' : arg));
+}
+
 function describeBuilder(choice: BuilderChoice): { title: string; desc: string } {
   switch (choice) {
     case 'cursor':
@@ -54,13 +58,13 @@ async function promptCursorConfig(existing?: EnvoiConfig['builder']['cursor']): 
       (await rl.question(`  command (Cursor CLI, must support 'agent') [${existing?.command ?? 'cursor'}]: `)).trim() ||
       (existing?.command ?? 'cursor');
     const defaultArgs = existing?.args?.length
-      ? existing.args
+      ? normalizeCursorCliArgs(existing.args)
       : ['agent', '--print', '--output-format', 'text', '--workspace', '.', '--force'];
     const argsLine =
       (await rl.question(
         `  args (space-separated, no quoting) [${defaultArgs.join(' ')}]: `
       )).trim();
-    const args = argsLine ? argsLine.split(/\s+/).filter(Boolean) : defaultArgs;
+    const args = normalizeCursorCliArgs(argsLine ? argsLine.split(/\s+/).filter(Boolean) : defaultArgs);
     const timeoutStr = (await rl.question(`  timeout_seconds [${existing?.timeout_seconds ?? 300}]: `)).trim();
     const timeout_seconds = timeoutStr ? Number.parseInt(timeoutStr, 10) : (existing?.timeout_seconds ?? 300);
     const driverKind =

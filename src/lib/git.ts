@@ -295,6 +295,36 @@ export function getGitTopLevel(): string | null {
 }
 
 /**
+ * Returns tracked symlink paths from git index (mode 120000).
+ *
+ * Paths are repository-relative.
+ */
+export function getTrackedSymlinkPaths(): string[] {
+  try {
+    const output = execSync('git ls-files -s', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    return output
+      .trim()
+      .split('\n')
+      .map((line) => line.trimEnd())
+      .filter((line) => line.length > 0)
+      .flatMap((line) => {
+        const tabIdx = line.indexOf('\t');
+        if (tabIdx <= 0) return [];
+        const left = line.slice(0, tabIdx);
+        const path = line.slice(tabIdx + 1);
+        const mode = left.split(/\s+/)[0] ?? '';
+        if (mode !== '120000' || path.length === 0) return [];
+        return [path];
+      });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Stashes relais/ directory files to prevent merge conflicts.
  *
  * Creates a stash containing only files in the relais/ directory.

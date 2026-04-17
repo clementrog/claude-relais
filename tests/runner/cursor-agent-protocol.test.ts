@@ -150,4 +150,41 @@ describe('cursor agent protocol prompt', () => {
     expect(options.env?.ENVOI_SCHEMA_PATH).toBeDefined();
     expect(result.success).toBe(true);
   });
+
+  it('normalizes legacy --prompt flag to --print for cursor_agent driver', async () => {
+    const base = createMockConfig();
+    const config = createMockConfig({
+      workspace_dir: workspaceDir,
+      builder: {
+        ...base.builder,
+        default_mode: 'cursor',
+        cursor: {
+          driver_kind: 'cursor_agent',
+          command: 'node',
+          args: ['agent', '--prompt', '--output-format', 'text', '--workspace', '.', '--force'],
+          timeout_seconds: 30,
+          output_file: 'BUILDER_RESULT.json',
+        },
+      },
+    });
+    const task = createMockTask('execute', {
+      builder: {
+        mode: 'cursor',
+        max_turns: 4,
+        instructions: 'Implement task from TASK.json',
+      },
+    });
+    const state = createMockTickState(config, task);
+
+    const result = await runBuilder(state, task);
+
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    const callArgs = execFileMock.mock.calls[0];
+    const args = callArgs[1] as string[];
+
+    expect(args).toContain('--print');
+    expect(args).not.toContain('--prompt');
+    expect(result.success).toBe(true);
+    expect(result.builderOutputValid).toBe(true);
+  });
 });

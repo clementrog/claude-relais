@@ -74,6 +74,14 @@ Defaults:
 
 - orchestrator model: `opus-4.6`
 - builder mode: `cursor` (enforced; non-cursor builder tasks are blocked)
+- destructive command gates on by default:
+`deny_prefixes` includes `rm`, `sudo`, `git reset --hard`, `git checkout --`, `git clean -fd`, `git clean -fdx`, `mkfs`, `dd`
+- `require_explicit_for_destructive: true`
+- preflight blocks tracked symlinks that resolve outside repo root
+
+Permission note:
+- do not auto-enable global `--dangerously-skip-permissions` at skill load
+- use `envoi autonomy --set fast` for low-friction mode with guardrails
 
 Override at install time:
 

@@ -6,6 +6,8 @@
 
 - Orchestrator model: `opus-4.6`
 - Builder mode: `cursor` (enforced)
+- Destructive gates: on (`deny_prefixes` + `require_explicit_for_destructive: true`)
+- Preflight symlink guard: blocks tracked symlinks that escape repo root
 - Install location: first existing match of:
   1. `$CLAUDE_RELAIS_DEST`
   2. `~/.claude/skills`
@@ -37,3 +39,8 @@ Installer writes `config.local.json` in the installed skill directory:
   "builder_mode": "cursor"
 }
 ```
+
+## Permission mode guidance
+
+- Avoid auto-enabling global `--dangerously-skip-permissions` on skill load.
+- Prefer `envoi autonomy --set fast` for low-friction execution with explicit destructive gates.

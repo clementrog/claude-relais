@@ -1217,6 +1217,10 @@ function parseReviewAction(value: string | undefined):
   return null;
 }
 
+function normalizeCursorCliArgs(args: string[]): string[] {
+  return args.map((arg) => (arg === '--prompt' || arg.startsWith('--prompt=') ? '--print' : arg));
+}
+
 function withDefaultCursorConfig(
   existing?: EnvoiConfig['builder']['cursor']
 ): NonNullable<EnvoiConfig['builder']['cursor']> {
@@ -1224,7 +1228,7 @@ function withDefaultCursorConfig(
   return {
     driver_kind: (existing?.driver_kind ?? 'cursor_agent') as any,
     command: existing?.command ?? 'cursor',
-    args: existing?.args?.length ? existing.args : defaultArgs,
+    args: existing?.args?.length ? normalizeCursorCliArgs(existing.args) : defaultArgs,
     timeout_seconds: existing?.timeout_seconds ?? 300,
     output_file: existing?.output_file ?? 'BUILDER_RESULT.json',
   };

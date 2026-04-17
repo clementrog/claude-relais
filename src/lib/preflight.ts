@@ -5,12 +5,12 @@
  * whether execution can proceed or is blocked.
  */
 
-import { stat, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { stat, readdir, lstat, readlink } from 'node:fs/promises';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { EnvoiConfig } from '../types/config.js';
 import type { PreflightResult, BlockedCode } from '../types/preflight.js';
 import { cleanupTmpFiles, isGlobPatternSafe } from './fs.js';
-import { isGitRepo, isWorktreeCleanExcluding, getHeadCommit } from './git.js';
+import { isGitRepo, isWorktreeCleanExcluding, getHeadCommit, getGitTopLevel, getTrackedSymlinkPaths } from './git.js';
 import { readWorkspaceState } from './workspace_state.js';
 import { resolveInWorkspace } from './paths.js';
 
@@ -79,6 +79,30 @@ async function getDirectorySize(dirPath: string): Promise<number> {
   return totalSize;
 }
 
+function isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
+  const rel = relative(rootPath, candidatePath);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+async function findTrackedSymlinkEscapes(repoRoot: string, trackedSymlinkPaths: string[]): Promise<string[]> {
+  const offenders: string[] = [];
+  for (const relPath of trackedSymlinkPaths) {
+    const linkPath = join(repoRoot, relPath);
+    try {
+      const stats = await lstat(linkPath);
+      if (!stats.isSymbolicLink()) continue;
+      const rawTarget = await readlink(linkPath);
+      const resolvedTarget = resolve(dirname(linkPath), rawTarget);
+      if (!isPathInsideRoot(repoRoot, resolvedTarget)) {
+        offenders.push(`${relPath} -> ${rawTarget}`);
+      }
+    } catch {
+      // Ignore missing/broken entries here; git/index integrity is handled elsewhere.
+    }
+  }
+  return offenders;
+}
+
 /**
  * Runs all preflight checks to determine if a tick can safely start.
  *
@@ -132,6 +156,20 @@ export async function runPreflight(config: EnvoiConfig): Promise<PreflightResult
         'BLOCKED_MISSING_CONFIG',
         `Failed to get HEAD commit: ${error instanceof Error ? error.message : String(error)}`
       );
+    }
+
+    const repoRoot = getGitTopLevel();
+    if (repoRoot) {
+      const trackedSymlinks = getTrackedSymlinkPaths();
+      const escapes = await findTrackedSymlinkEscapes(repoRoot, trackedSymlinks);
+      if (escapes.length > 0) {
+        const preview = escapes.slice(0, 5).join(', ');
+        const suffix = escapes.length > 5 ? ` (+${escapes.length - 5} more)` : '';
+        return blocked(
+          'BLOCKED_MISSING_CONFIG',
+          `Unsafe tracked symlink(s) escaping repository root: ${preview}${suffix}`
+        );
+      }
     }
   }
 
